@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Go port of [`johncegom/youtube-mcp-cli`](https://github.com/johncegom/youtube-mcp-cli) (a TypeScript project): a YouTube transcript/metadata/download tool exposed both as an MCP stdio server and a standalone CLI, with no YouTube API key — metadata comes from scraping the watch-page HTML and transcripts/downloads come from shelling out to `yt-dlp`. Phase 1 (in progress) is a faithful port of the existing TS functionality; no new features beyond what the TS version has are in scope yet.
 
-**Before doing any work here, read `docs/PLAN.md` (the full design/porting plan), `docs/LEDGER.md` (what's actually been built so far, and the exact next step), and `docs/BUGS.md` (tracked bugs — including inherited-from-upstream ones — pending a decision) — the ledger is the source of truth for progress, not this file.**
+**Before doing any work here, read `docs/PLAN.md` (the full design/porting plan), `docs/LEDGER.md` (a lightweight index — current status + a table linking to each task's full detail under `docs/tasks/<slug>/TASK.md`), and `docs/BUGS.md` (tracked bugs — including inherited-from-upstream ones — pending a decision) — the ledger index is the source of truth for progress, not this file. Read `docs/LEDGER.md` first, then open only the specific `docs/tasks/*/TASK.md` file(s) you actually need — this split exists specifically to avoid loading every finished task's history into context.**
 
 ### Bug tracking
 
@@ -25,7 +25,7 @@ gofmt -w <files>                        # format — run before every commit/ver
 
 There is no Makefile, linter config, or CI config in this repo yet — `go build`, `go vet`, `go test`, and `gofmt` are the whole toolchain.
 
-Two binaries live under `cmd/`: `cmd/youtube-cli` (CLI) and `cmd/youtube-mcp` (MCP server) — not yet built as of the last ledger update. Once they exist: `go run ./cmd/youtube-cli <args>` and `go run ./cmd/youtube-mcp`.
+Two binaries live under `cmd/`: `cmd/youtube-cli` (CLI, built and working — `go run ./cmd/youtube-cli <args>`) and `cmd/youtube-mcp` (MCP server, not yet built — see `docs/tasks/07-mcpserver/TASK.md`).
 
 ## Required workflow: strict TDD
 
@@ -39,20 +39,22 @@ This project follows TDD strictly, and **the implementation must adapt to the te
 
 I/O-bound code that can't be unit-tested this way (live HTTP scraping in `FetchVideoMetadata`, subprocess calls to `yt-dlp` in `fetchSegments`) is intentionally left uncovered by unit tests and is instead exercised by the end-to-end smoke test (final task in the plan). Pure logic embedded in otherwise I/O-heavy functions should still be factored out and tested (see how `transcript.go` splits pure presentation/search/error-classification functions from the I/O `fetchSegments`/`SaveTranscriptFile`).
 
-**After completing each numbered task in `docs/LEDGER.md`, update that file first** — check off what was done, note any deviations, update the "Resume checklist" pointer to the next task — **then pause and ask the human whether to continue** before starting the next task. Do not chain multiple ledger tasks together in one uninterrupted run, and do not ask before the ledger reflects the work just finished.
+**After completing each task, update that task's `docs/tasks/<slug>/TASK.md` first** — check off what was done, note any deviations — **then update `docs/LEDGER.md`'s index** (status column/checkbox, "Current status", "Resume checklist" pointer to the next task) — **then pause and ask the human whether to continue** before starting the next task. Do not chain multiple tasks together in one uninterrupted run, and do not ask before both files reflect the work just finished.
 
 ## Architecture
 
 One Go module, two `cmd/` binaries, one shared `internal/core` package — the idiomatic-Go equivalent of the original TS monorepo's three npm packages (`packages/core`, `packages/cli`, `packages/mcp`).
 
 ```
-cmd/youtube-cli/       cobra-based CLI entrypoint      (not yet built)
+cmd/youtube-cli/       cobra-based CLI entrypoint      (built)
 cmd/youtube-mcp/       MCP stdio server entrypoint     (not yet built)
 internal/core/         all shared logic — see below
-internal/cli/          cobra command wiring            (not yet built)
+internal/cli/          cobra command wiring            (built)
 internal/mcpserver/    MCP tool registration/handlers  (not yet built)
 docs/PLAN.md           full design plan + source-repo analysis + porting notes
-docs/LEDGER.md         task-by-task progress tracker + resume checklist — READ FIRST
+docs/LEDGER.md         index: current status + links to per-task detail — READ FIRST
+docs/tasks/<slug>/TASK.md   full detail for one task (checklist, notes, deviations)
+docs/BUGS.md           tracked bugs (symptom, root cause, options, decision)
 ```
 
 `internal/` (not `pkg/`) is deliberate: nothing here is meant to be imported by other modules.
@@ -67,11 +69,18 @@ docs/LEDGER.md         task-by-task progress tracker + resume checklist — READ
 - **`transcript.go`** — split into pure and I/O halves:
   - *Pure* (unit-tested against ground truth): `parseVtt` (VTT → segments, with tag-stripping/entity-decoding/whitespace-collapse/dedupe), `transcriptText`, `transcriptTimed`, `searchSegments`, `formatSearchResult`, `TranscriptErrorText` (classifies a raw error into a user-facing message by substring match — timeout / missing captions / network / generic).
   - *I/O*: `fetchSegments` (runs `yt-dlp` into a temp dir to pull `.vtt` subtitles, parses the result), and the public entrypoints `GetTranscriptText`, `GetTranscriptTimed`, `SearchInTranscript`, `SaveTranscriptFile` (the last fetches transcript + metadata concurrently via two goroutines + a `sync.WaitGroup`, mirroring the TS `Promise.all`, then writes a Markdown file with a metadata header).
-- **download logic** (`download.go`, not yet written) — see `docs/LEDGER.md` task 5 for the exact functions still needed (`StartVideoDownload`/`StartAudioDownload` fire-and-forget for the MCP path, `DownloadVideoBlocking`/`DownloadAudioBlocking` streaming to stdout/stderr for the CLI path).
+- **`download.go`** — `qualityFormatMap`/`qualityFormat` (five quality presets, unknown-quality falls back to hd720), `resolveTitle` (metadata-based display+safe title, falls back to video ID on error), `StartVideoDownload`/`StartAudioDownload` (fire-and-forget goroutine detached from request `ctx`, used by the MCP path, mirrors TS `execFile(...).unref()`), `DownloadVideoBlocking`/`DownloadAudioBlocking` (blocking, uses `Command.BuildCommand` to get the raw `*exec.Cmd` and wires `Stdout`/`Stderr` directly to the process's own — used by the CLI path, mirrors TS `spawn(..., {stdio: "inherit"})`).
+- **`ffmpeg_prewarm.go`** — works around a `go-ytdlp` limitation (its ffmpeg download uses a hardcoded 30s HTTP timeout too short for the ~170MB archive on slower connections — see `docs/BUGS.md` BUG-002): downloads the archive ourselves with a longer timeout and drops the extracted binary at `go-ytdlp`'s own expected cache path, so its downloader finds it and never attempts its own (too-short) download. Implemented for `windows/amd64` and `linux/amd64`.
 
-### Planned (not yet built) — see `docs/PLAN.md` for full detail
+### `internal/cli` — cobra CLI, built (`cmd/youtube-cli`)
 
-- **`internal/cli`**: `spf13/cobra`-based CLI mirroring the TS `commander` commands (`transcript`, `search`, `metadata`, `download`), using cobra's built-in `completion` subcommand rather than hand-porting the original's bash/zsh completion scripts.
+`spf13/cobra`-based CLI mirroring the TS `commander` commands (`transcript`,
+`search`, `metadata`, `download`) — see `docs/tasks/06-cli-cobra/TASK.md` for
+the full breakdown. Uses cobra's built-in `completion` subcommand rather
+than hand-porting the original's bash/zsh completion scripts.
+
+### Planned (not yet built) — see `docs/tasks/07-mcpserver/TASK.md` for full detail
+
 - **`internal/mcpserver`**: built on the official `github.com/modelcontextprotocol/go-sdk`, registering 10 tools via `mcp.AddTool` with typed input structs (several are name-aliases pointing at the same handler, mirroring the TS server's alias tool names).
 
 ### Key external dependencies and why

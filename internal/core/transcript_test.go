@@ -64,6 +64,24 @@ func TestParseVtt_EmptyTextBlockDropped(t *testing.T) {
 	}
 }
 
+// FuzzParseVtt checks that parseVtt never panics on arbitrary input. This
+// content comes straight from a yt-dlp-downloaded subtitle file (i.e.
+// network-sourced, effectively untrusted), so it must degrade gracefully
+// (empty/partial results) on malformed or adversarial VTT rather than
+// crash the caller.
+func FuzzParseVtt(f *testing.F) {
+	f.Add(vttFixture)
+	f.Add("")
+	f.Add("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello")
+	f.Add("not vtt at all, just plain text\nwith some\nnewlines")
+	f.Add("00:00:00.000 --> \n<garbled")
+	f.Add("--> --> -->\n\n\n\n")
+
+	f.Fuzz(func(t *testing.T, content string) {
+		_ = parseVtt(content) // must not panic
+	})
+}
+
 // Ground truth for the functions below was derived by running the
 // equivalent TS logic (getTranscriptText/getTranscriptTimed/
 // searchInTranscript/transcriptErrorText) directly through Node.
