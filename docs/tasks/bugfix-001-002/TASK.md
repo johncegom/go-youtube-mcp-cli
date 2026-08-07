@@ -71,7 +71,9 @@ cannot fix it.
    reading `resolveExecutable` in its source), so once pre-warmed, it finds
    our file and never hits its own 30s wall. Implemented for `windows/amd64`
    (zip) and `linux/amd64` (tar.xz) — the platforms verifiable/most likely
-   to matter; other platforms fall through to the unchanged retry path.
+   to matter; other platforms fall through to the unchanged retry path. This
+   platform-scoping choice is logged as `docs/DECISIONS.md` DECISION-006,
+   since it's a deliberate scoping decision, not part of the bug itself.
    Unit-tested: `ffmpegPrewarmConfig` (platform→URL/archive-type table, 5
    cases), `entryMatchesBinary` (archive-entry-name matching, 6 cases),
    `extractFromZip` (real in-memory zip fixture, round-tripped through

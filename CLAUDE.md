@@ -6,11 +6,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Go port of [`johncegom/youtube-mcp-cli`](https://github.com/johncegom/youtube-mcp-cli) (a TypeScript project): a YouTube transcript/metadata/download tool exposed both as an MCP stdio server and a standalone CLI, with no YouTube API key — metadata comes from scraping the watch-page HTML and transcripts/downloads come from shelling out to `yt-dlp`. Phase 1 (in progress) is a faithful port of the existing TS functionality; no new features beyond what the TS version has are in scope yet.
 
-**Before doing any work here, read `docs/PLAN.md` (the full design/porting plan), `docs/LEDGER.md` (a lightweight index — current status + a table linking to each task's full detail under `docs/tasks/<slug>/TASK.md`), and `docs/BUGS.md` (tracked bugs — including inherited-from-upstream ones — pending a decision) — the ledger index is the source of truth for progress, not this file. Read `docs/LEDGER.md` first, then open only the specific `docs/tasks/*/TASK.md` file(s) you actually need — this split exists specifically to avoid loading every finished task's history into context.**
+**Before doing any work here, read `docs/PLAN.md` (the full design/porting plan), `docs/LEDGER.md` (a lightweight index — current status + a table linking to each task's full detail under `docs/tasks/<slug>/TASK.md`), `docs/BUGS.md` (tracked bugs — including inherited-from-upstream ones — pending a decision), and `docs/DECISIONS.md` (deliberate design/scope tradeoffs made along the way) — the ledger index is the source of truth for progress, not this file. Read `docs/LEDGER.md` first, then open only the specific `docs/tasks/*/TASK.md` file(s) you actually need — this split exists specifically to avoid loading every finished task's history into context.**
+
+### Task approval: Definition of Done + Test Plan (anti-drift control)
+
+Before starting implementation on any task, its `docs/tasks/<slug>/TASK.md`
+must have a **Definition of Done** (concrete, testable exit criteria) and a
+**Test Plan** (what gets unit-tested, what gets manually smoke-tested, and
+the specific commands to run) written out and reviewed — see
+`docs/tasks/07-mcpserver/TASK.md` for the pattern. This is deliberately
+**committed to the repo** (the task's own `TASK.md`, not a Plan Mode
+session's ephemeral plan file under `~/.claude/plans/`, which nobody else
+and no future session can see) — that's the whole point: a future session or
+a human reviewer should be able to see exactly what a task was scoped and
+approved to do, without reconstructing it from a plan file that isn't part
+of this repository's history at all.
+
+Do not silently expand scope mid-task — e.g. fixing unrelated stale doc
+content "while you're in there" — even when the fix is correct. If you
+notice something out of scope while working, either ask first or log it
+separately (as its own decision/task), rather than folding it into the
+current task's diff unannounced.
 
 ### Bug tracking
 
 When a bug is found (including latent bugs inherited from the upstream TS project that a faithful port reproduces), it goes into `docs/BUGS.md`, not a silent fix. Add an entry with symptom and root cause (or say explicitly that root cause is unknown), propose options if there's an obvious fix, and **wait for a human decision before applying it** — the same pause-and-ask discipline that applies to `docs/LEDGER.md`'s numbered tasks applies to bugs.
+
+### Decision log
+
+When you make a deliberate design/scope tradeoff during implementation —
+not a bug, a genuine choice where a reasonable reviewer might pick
+differently (e.g. "use library X's built-in Y instead of porting upstream's
+hand-written Z") — log it in `docs/DECISIONS.md`: context, decision,
+alternatives considered, consequences. Don't log every micro-choice; log
+ones worth a reviewer knowing about. See `docs/DECISIONS.md`'s own header
+for the precise boundary against `docs/BUGS.md`.
 
 ## Commands
 
@@ -39,7 +69,7 @@ This project follows TDD strictly, and **the implementation must adapt to the te
 
 I/O-bound code that can't be unit-tested this way (live HTTP scraping in `FetchVideoMetadata`, subprocess calls to `yt-dlp` in `fetchSegments`) is intentionally left uncovered by unit tests and is instead exercised by the end-to-end smoke test (final task in the plan). Pure logic embedded in otherwise I/O-heavy functions should still be factored out and tested (see how `transcript.go` splits pure presentation/search/error-classification functions from the I/O `fetchSegments`/`SaveTranscriptFile`).
 
-**After completing each task, update that task's `docs/tasks/<slug>/TASK.md` first** — check off what was done, note any deviations — **then update `docs/LEDGER.md`'s index** (status column/checkbox, "Current status", "Resume checklist" pointer to the next task) — **then pause and ask the human whether to continue** before starting the next task. Do not chain multiple tasks together in one uninterrupted run, and do not ask before both files reflect the work just finished.
+**After completing each task, update that task's `docs/tasks/<slug>/TASK.md` first** — check off what was done, note any deviations — **then update `docs/LEDGER.md`'s index** (status column/checkbox, "Current status", "Resume checklist" pointer to the next task) — **then pause and ask the human whether to continue** before starting the next task. Do not chain multiple tasks together in one uninterrupted run, and do not ask before both files reflect the work just finished. Before starting the *next* task, its Definition of Done + Test Plan must exist and be reviewed first (see "Task approval" above).
 
 ## Architecture
 
@@ -53,8 +83,9 @@ internal/cli/          cobra command wiring            (built)
 internal/mcpserver/    MCP tool registration/handlers  (not yet built)
 docs/PLAN.md           full design plan + source-repo analysis + porting notes
 docs/LEDGER.md         index: current status + links to per-task detail — READ FIRST
-docs/tasks/<slug>/TASK.md   full detail for one task (checklist, notes, deviations)
+docs/tasks/<slug>/TASK.md   full detail for one task (checklist, notes, deviations, DoD, Test Plan)
 docs/BUGS.md           tracked bugs (symptom, root cause, options, decision)
+docs/DECISIONS.md      deliberate design/scope tradeoffs (not bugs)
 ```
 
 `internal/` (not `pkg/`) is deliberate: nothing here is meant to be imported by other modules.

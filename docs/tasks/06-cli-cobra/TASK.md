@@ -12,6 +12,7 @@
 
 ## Known minor divergences from the TS CLI
 
-Judged not worth matching exactly:
-- cobra's built-in unknown-command message differs in wording from the TS custom handler.
-- `metadata --json` output has alphabetically-sorted keys (Go's `encoding/json` sorts map keys) instead of the TS object's insertion order — both are semantically valid JSON, order is not meaningful to consumers like `jq`.
+Logged as deliberate decisions rather than bugs — see `docs/DECISIONS.md`
+DECISION-003 (cobra completion vs hand-ported scripts), DECISION-004
+(`metadata --json` key order), DECISION-005 (unknown-command message
+wording).

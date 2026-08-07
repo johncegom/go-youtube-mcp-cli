@@ -36,6 +36,26 @@ Uses the official `github.com/modelcontextprotocol/go-sdk`.
   tests anticipated; verify via manual smoke test (e.g. an MCP inspector or
   a temporary client) per task 9.
 
+## Definition of Done
+
+- All 10 tools (incl. the 3 alias pairs) registered via `mcp.AddTool` and callable.
+- Each alias tool (`get_transcript_timestamps`, `get_video_metadata`, `search_in_transcript`) returns output identical to its canonical counterpart for the same input.
+- `download_video`/`download_audio`/`download_transcript(_timed)` return an `isError` `CallToolResult` (not a crash, not an unhandled Go error) when `core.ResolveOutputDir` rejects the given `outputDir`.
+- Invalid `url`/missing required args produce a clear `isError` result, not a panic or protocol-level error.
+- `cmd/youtube-mcp` starts, connects over stdio, and stays running until the client disconnects or the process is killed.
+- `go build ./... && go vet ./... && go test ./...` clean; no regressions in the existing `internal/core`/`internal/cli` test suite.
+
+## Test Plan
+
+- **Unit tests**: none anticipated up front — this task is almost entirely I/O/protocol wiring around already-tested `internal/core` functions. If any pure helper emerges (e.g. building `CallToolResult` content, mapping an alias name to its canonical handler), it gets a TDD-style unit test per the project's standard process (`CLAUDE.md`), same as `pickVttFile`/`qualityFormat` did.
+- **Manual smoke test** (per task 9): run `go run ./cmd/youtube-mcp`, connect with a real MCP client (an inspector tool, or Claude Code itself via a temporary `.mcp.json` entry), and call each of the 10 tools once against a real video ID (e.g. `dQw4w9WgXcQ`) — confirm the 3 alias pairs return identical output to their canonical tool, and confirm an intentionally-invalid `outputDir` (e.g. `/etc`) returns `isError: true` rather than crashing the server.
+
+This Definition of Done + Test Plan was written and reviewed *before*
+starting implementation, per the project's task-approval process (see
+`CLAUDE.md`) — so a future session or reviewer can see exactly what this
+task was scoped and approved to do, without having to reconstruct it from an
+ephemeral Plan Mode session.
+
 ## Before starting
 
 Run `go build ./... && go vet ./... && go test ./...` to confirm the current
