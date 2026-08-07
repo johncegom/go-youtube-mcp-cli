@@ -37,7 +37,7 @@ this index) before pausing.
 | — | Out-of-band: fix BUG-001 + BUG-002 | [x] fixed, merged to `main` | [docs/tasks/bugfix-001-002/TASK.md](tasks/bugfix-001-002/TASK.md) |
 | — | Out-of-band: fuzz tests for untrusted-input parsers | [x] done | [docs/tasks/fuzz-tests/TASK.md](tasks/fuzz-tests/TASK.md) |
 | — | Out-of-band: task-level Definition of Done/Test Plan + decision log | [x] done | see `CLAUDE.md` process rules + `docs/DECISIONS.md` |
-| — | Out-of-band: CI/CD (GitHub Actions + branch protection) | [~] in progress | [docs/tasks/ci-cd/TASK.md](tasks/ci-cd/TASK.md) |
+| — | Out-of-band: CI/CD (GitHub Actions; branch protection blocked, see DECISION-007) | [x] done | [docs/tasks/ci-cd/TASK.md](tasks/ci-cd/TASK.md) |
 
 ## Current status
 
