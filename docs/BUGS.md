@@ -23,7 +23,7 @@ tradeoff) · `not-a-bug` (investigated, turned out to be expected behavior).
 
 ## BUG-001: Transcript fetch can 429 or silently return a translated/wrong-language transcript
 
-- **Status:** open
+- **Status:** fixed (branch `fix/bug-001-002-subtitle-and-ffmpeg`, pending merge to `main`)
 - **Discovered:** manual CLI smoke test of `internal/core/transcript.go`'s `fetchSegments` (task 6 verification), against `dQw4w9WgXcQ`
 - **Inherited from upstream:** yes — reproduced independently by running `yt-dlp` directly with the same flags outside any of our Go code, so this is a latent bug in the original TS project (`packages/core/src/index.ts`), not something the Go port introduced. A faithful Phase-1 port currently reproduces it exactly.
 
@@ -45,13 +45,16 @@ Two compounding issues, both present in the original TS logic and carried over v
 - **Leave as-is for Phase 1:** faithful parity with upstream; revisit in a later phase.
 
 ### Decision
-Pending — awaiting human input (a `docs/BUGS.md` tracking process was requested specifically so this doesn't get decided or fixed silently; will be raised for a decision separately from task 7).
+Fix now (human decision, this session). Implemented as:
+1. `SubLangs(language)` — exact match, no `.*` wildcard (`internal/core/transcript.go`, `fetchSegments`). Verified directly against `yt-dlp` outside our code that this pulls only the plain-language track and avoids the multi-variant request burst.
+2. `pickVttFile(files, language)` (`internal/core/transcript.go`) — new pure function, prefers a file ending exactly in `.<language>.vtt`, falls back to the first `.vtt` found only if no exact match exists. Unit-tested (`internal/core/transcript_test.go`, `TestPickVttFile`, 5 cases) — ground truth is the fix's own specification since there's no upstream equivalent to derive from.
+3. Verified end-to-end against `dQw4w9WgXcQ`: `transcript --timestamps` and `search` both now return the correct English transcript with no 429, where they previously failed reliably.
 
 ---
 
 ## BUG-002: `EnsureYtDlp` silently swallows ffmpeg auto-install failure, breaking downloads
 
-- **Status:** open
+- **Status:** fixed (branch `fix/bug-001-002-subtitle-and-ffmpeg`, pending merge to `main`)
 - **Discovered:** manual CLI smoke test of `internal/core/download.go` (`DownloadVideoBlocking`/`DownloadAudioBlocking`), same session as BUG-001, against `dQw4w9WgXcQ`
 - **Not inherited from upstream in the same way as BUG-001:** the *symptom* (ffmpeg missing) can happen to the TS original too if its `ytdlp-nodejs` postinstall download fails, but the TS version at least runs that download at `npm install` time where a failure is loud (non-zero exit, visible in install logs). Our Go port's design choice to install lazily and swallow the error is what turns this into a *silent* failure — see `internal/core/ytdlp.go`, `EnsureYtDlp`.
 
@@ -82,5 +85,13 @@ i.e. the ffmpeg archive (~80–100MB) timed out mid-download. That specific time
 - **Fix now:** at minimum, log the `InstallFFmpeg` error (e.g. via the same stderr+`LogDownloadError` pattern already used for download failures) so it's not silent; consider whether `StartVideoDownload`/`DownloadVideoBlocking` should surface a clear upfront error when ffmpeg isn't available and the request needs it (merging formats / audio extraction), rather than letting yt-dlp fail or degrade downstream. Also consider retrying/extending the download timeout for the ffmpeg archive specifically, since it's much larger than the yt-dlp binary itself.
 - **Leave as-is for Phase 1:** faithful-enough parity (TS also depends on an external ffmpeg install succeeding); revisit in a later phase.
 
+### Root cause, precisely (confirmed before fixing)
+Read `go-ytdlp` v1.3.5's own source (`install.go`): `downloadTimeout = 30 * time.Second` is a single hardcoded `http.Client{Timeout: ...}` used by the *same* `downloadFile` function for both the yt-dlp binary (small, succeeds) and the ffmpeg archive (large, times out) — no size-aware adjustment. Measured directly: the archive is **170MB**; a raw `curl` in this environment pulled it in ~43s at ~4MB/s — a sustained throughput limit, not a transient blip, so simple retries alone cannot fix it (confirmed: 3 retries all failed identically before the deeper fix below).
+
 ### Decision
-Pending — awaiting human input, same as BUG-001.
+Fix now (human decision, this session), plus "kindly suggest the user pre-install ffmpeg for convenience" (explicit follow-up instruction). Implemented as:
+1. **Bounded retry + visible failure** (`internal/core/ytdlp.go`): `installFFmpegWithRetry` (3 attempts, injectable install function for testability — `internal/core/ytdlp_test.go`, 3 cases covering transient-then-success, first-try-success, and exhausted-retries). Failures are now logged to stderr and `LogDownloadError` instead of silently swallowed.
+2. **Cache pre-warm workaround** (`internal/core/ffmpeg_prewarm.go`): before falling back to go-ytdlp's own (timeout-limited) downloader, we download the ffmpeg archive ourselves with a 5-minute timeout and extract just the `ffmpeg`/`ffmpeg.exe` binary directly into go-ytdlp's own expected cache path (`ytdlp.GetCacheDir()`). `go-ytdlp`'s `InstallFFmpeg` checks that exact location *before* attempting any network call (confirmed by reading `resolveExecutable` in its source), so once pre-warmed, it finds our file and never hits its own 30s wall. Implemented for `windows/amd64` (zip) and `linux/amd64` (tar.xz) — the platforms verifiable/most likely to matter; other platforms fall through to the unchanged retry path. Unit-tested: `ffmpegPrewarmConfig` (platform→URL/archive-type table, 5 cases), `entryMatchesBinary` (archive-entry-name matching, 6 cases), `extractFromZip` (real in-memory zip fixture, round-tripped through actual `archive/zip`, 2 cases) — all pure/offline. The network download + tar.xz path are I/O and not unit-tested, consistent with project convention, but the zip path (this environment's platform) was verified for real end-to-end below.
+3. **`requireFFmpeg(ffmpegPath)`** (`internal/core/ytdlp.go`, unit-tested): audio downloads (`StartAudioDownload`/`DownloadAudioBlocking`) now fail fast with a clear, actionable message when ffmpeg truly isn't available, instead of a confusing deep yt-dlp postprocessing error. Video downloads print a clear upfront warning (not a hard failure) when ffmpeg is unavailable, since merging is graceful-degradable (matches upstream's "ffmpeg optional" intent) but the degraded output should no longer be a surprise.
+4. **Friendly manual-install suggestion**, per explicit request: printed once, before the download starts (`"ffmpeg not found locally; downloading now (one-time, ~170MB, can take a while on slower connections). For faster/more reliable startup, consider installing ffmpeg yourself and ensuring it's on PATH."`), and repeated in both the final failure warning and `requireFFmpeg`'s error message.
+5. **Verified end-to-end** against `dQw4w9WgXcQ` after clearing the ffmpeg cache: `download --audio --format mp3` now actually runs `[ExtractAudio]` and produces a real, correctly-sized `.mp3` (previously: hard failure); `download --quality sd360` now runs `[Merger] Merging formats into "...mp4"` and produces one playable `.mp4` (previously: silently left two unmerged files on disk).

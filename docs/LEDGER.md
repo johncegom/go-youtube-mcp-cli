@@ -67,7 +67,38 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ---
 
-## Session status: PAUSED after task 6 (by user request, not credit-related)
+## Out-of-band work: BUG-001 and BUG-002 fixed on branch `fix/bug-001-002-subtitle-and-ffmpeg`
+
+Manual smoke-testing `cmd/youtube-cli` against a real video (`dQw4w9WgXcQ`) after task 6
+surfaced two real bugs, tracked and fully written up in `docs/BUGS.md`:
+- **BUG-001**: transcript/search could 429 or silently return a mistranslated
+  caption track, due to an overly broad `--sub-langs` wildcard inherited
+  verbatim from the upstream TS project, compounded by naive "first .vtt file"
+  selection.
+- **BUG-002**: ffmpeg auto-install failures were silently swallowed, and
+  `go-ytdlp`'s internal 30s download timeout is provably too short for the
+  ~170MB ffmpeg archive on this environment's network (~43s at measured
+  throughput) — not transient flakiness, a deterministic mismatch.
+
+Both were root-caused (see `docs/BUGS.md` for full detail incl. exact
+`go-ytdlp` source references) and fixed with TDD on a **separate branch**,
+per explicit instruction: this repo was git-initialized and an initial commit
+made on `main` capturing the state through task 6, then
+`fix/bug-001-002-subtitle-and-ffmpeg` was branched off for the fix work.
+**`main` has not been touched since** — it still reflects the pre-fix,
+task-6-only state. The fix branch is fully committed-ready (build/vet/test
+clean, 41 tests passing, both fixes verified end-to-end against the real
+video) but **not yet merged** — merging is a decision for the human, to be
+asked separately, per "we will try to resolve the problem on that branch
+first, if it all passed, we might proceed (ask me again)."
+
+New files on the fix branch: `internal/core/ffmpeg_prewarm.go` (+ test),
+`internal/core/ytdlp_test.go`. Modified: `internal/core/transcript.go` (+ test),
+`internal/core/ytdlp.go`, `internal/core/download.go`.
+
+---
+
+## Session status: PAUSED after task 6 on `main` / bug fixes complete on `fix/bug-001-002-subtitle-and-ffmpeg` (awaiting merge decision)
 
 Tasks 1–6 are done: module scaffolding, all of `internal/core` (videoid, format,
 paths, ytdlp wrapper, metadata scraping, transcript, download), and the full

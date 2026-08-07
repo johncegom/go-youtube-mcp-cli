@@ -148,6 +148,27 @@ func TranscriptErrorText(videoID string, err error) string {
 	}
 }
 
+// pickVttFile chooses which .vtt file to parse out of a directory listing.
+// It prefers an exact match on "<language>.vtt" and falls back to the first
+// .vtt file found if there's no exact match, returning "" if there are no
+// .vtt files at all. See docs/BUGS.md BUG-001: the upstream TS
+// implementation has no equivalent — it just takes the first .vtt file
+// unconditionally, which can silently pick an auto-translated variant.
+func pickVttFile(files []string, language string) string {
+	exactSuffix := "." + language + ".vtt"
+	for _, f := range files {
+		if strings.HasSuffix(f, exactSuffix) {
+			return f
+		}
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f, ".vtt") {
+			return f
+		}
+	}
+	return ""
+}
+
 // ── Fetching (I/O) ────────────────────────────────────────────────────────
 
 func fetchSegments(ctx context.Context, videoID, language string) ([]transcriptSegment, error) {
@@ -164,12 +185,18 @@ func fetchSegments(ctx context.Context, videoID, language string) ([]transcriptS
 	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	// SubLangs uses an exact language match, not a "language.*" wildcard
+	// (which the upstream TS uses) — see docs/BUGS.md BUG-001. The wildcard
+	// also matches YouTube's auto-translated caption variants (e.g.
+	// "en-de-DE" = English translated from German), which can both trigger
+	// 429s from requesting many variants at once and produce the wrong
+	// transcript if a translated file gets picked over the real one.
 	outputTemplate := filepath.Join(tmpDir, "sub")
 	cmd := NewYtDlpCommand().
 		SkipDownload().
 		WriteAutoSubs().
 		WriteSubs().
-		SubLangs(language + ".*").
+		SubLangs(language).
 		SubFormat("vtt").
 		Output(outputTemplate).
 		NoWarnings().
@@ -192,16 +219,15 @@ func fetchSegments(ctx context.Context, videoID, language string) ([]transcriptS
 	if err != nil {
 		return nil, err
 	}
-	var vttPath string
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".vtt") {
-			vttPath = filepath.Join(tmpDir, e.Name())
-			break
-		}
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name()
 	}
-	if vttPath == "" {
+	picked := pickVttFile(names, language)
+	if picked == "" {
 		return nil, fmt.Errorf("no transcript available for video %s. The video may not have captions in language %q", videoID, language)
 	}
+	vttPath := filepath.Join(tmpDir, picked)
 
 	content, err := os.ReadFile(vttPath)
 	if err != nil {
