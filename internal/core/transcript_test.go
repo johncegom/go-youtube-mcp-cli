@@ -111,6 +111,58 @@ func TestSearchSegments_CaseInsensitive(t *testing.T) {
 	}
 }
 
+// pickVttFile has no upstream TS equivalent (the TS original just takes
+// vttFiles[0] blindly, which is BUG-001's second contributing cause — see
+// docs/BUGS.md). Ground truth here is the fix's own specification: prefer a
+// file whose name exactly ends in ".<language>.vtt", falling back to the
+// first ".vtt" file only if no exact match exists.
+func TestPickVttFile(t *testing.T) {
+	cases := []struct {
+		name     string
+		files    []string
+		language string
+		want     string
+	}{
+		{
+			name:     "single exact match",
+			files:    []string{"sub.en.vtt"},
+			language: "en",
+			want:     "sub.en.vtt",
+		},
+		{
+			name:     "prefers exact match among multiple candidates",
+			files:    []string{"sub.en-de-DE.vtt", "sub.en.vtt", "sub.en-ja.vtt"},
+			language: "en",
+			want:     "sub.en.vtt",
+		},
+		{
+			name:     "falls back to first .vtt when no exact match",
+			files:    []string{"sub.en-de-DE.vtt", "sub.en-ja.vtt"},
+			language: "en",
+			want:     "sub.en-de-DE.vtt",
+		},
+		{
+			name:     "no vtt files at all",
+			files:    []string{"sub.info.json"},
+			language: "en",
+			want:     "",
+		},
+		{
+			name:     "empty file list",
+			files:    []string{},
+			language: "en",
+			want:     "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := pickVttFile(tc.files, tc.language); got != tc.want {
+				t.Errorf("pickVttFile(%v, %q) = %q, want %q", tc.files, tc.language, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestTranscriptErrorText(t *testing.T) {
 	cases := []struct {
 		name string

@@ -57,6 +57,9 @@ func StartVideoDownload(ctx context.Context, videoID, quality, outputDir string)
 	if err := EnsureYtDlp(ctx); err != nil {
 		return "", err
 	}
+	if ffmpegPath == "" {
+		fmt.Fprintln(os.Stderr, "warning: ffmpeg is not available; video and audio streams will not be merged into a single file")
+	}
 
 	title, safeTitle := resolveTitle(ctx, videoID)
 	predictedPath := filepath.Join(outputDir, safeTitle+".mp4")
@@ -81,6 +84,9 @@ func StartVideoDownload(ctx context.Context, videoID, quality, outputDir string)
 // StartAudioDownload is the audio counterpart to StartVideoDownload.
 func StartAudioDownload(ctx context.Context, videoID, audioFormat, outputDir string) (string, error) {
 	if err := EnsureYtDlp(ctx); err != nil {
+		return "", err
+	}
+	if err := requireFFmpeg(ffmpegPath); err != nil {
 		return "", err
 	}
 
@@ -111,6 +117,9 @@ func DownloadVideoBlocking(ctx context.Context, videoID, quality, outputDir stri
 	if err := EnsureYtDlp(ctx); err != nil {
 		return err
 	}
+	if ffmpegPath == "" {
+		fmt.Fprintln(os.Stderr, "warning: ffmpeg is not available; video and audio streams will not be merged into a single file")
+	}
 
 	builder := NewYtDlpCommand().
 		Output(filepath.Join(outputDir, "%(title)s.%(ext)s")).
@@ -126,6 +135,9 @@ func DownloadVideoBlocking(ctx context.Context, videoID, quality, outputDir stri
 // DownloadAudioBlocking is the audio counterpart to DownloadVideoBlocking.
 func DownloadAudioBlocking(ctx context.Context, videoID, audioFormat, outputDir string) error {
 	if err := EnsureYtDlp(ctx); err != nil {
+		return err
+	}
+	if err := requireFFmpeg(ffmpegPath); err != nil {
 		return err
 	}
 
