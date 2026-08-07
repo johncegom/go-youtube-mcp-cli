@@ -15,11 +15,11 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done
 ## 2. Port internal/core: videoid, format, paths
 - [x] `internal/core/videoid.go` — `ExtractVideoID`
 - [x] `internal/core/format.go` — `FormatTimestamp`, `FormatDuration`, `parseISODuration`, `SanitizeTitle`
-- [x] `internal/core/paths.go` — `GetDownloadsDir`, `ResolveOutputDir`, `LogDownloadError` (uses `os.UserCacheDir()` instead of hardcoded `~/.cache`, per plan's deliberate Windows fix)
+- [x] `internal/core/paths.go` — `GetDownloadsDir`, `ResolveOutputDir`, `LogDownloadError` (uses `os.UserCacheDir()` instead of hardcoded `~/.cache` — see `docs/DECISIONS.md` DECISION-002)
 - [x] `internal/core/videoid_test.go`, `internal/core/format_test.go` — passing (verified `SanitizeTitle` edge cases against the real TS regex logic run through Node to get ground truth)
 
 ## 3. Port internal/core: ytdlp wrapper + metadata scraping
-- [x] `internal/core/ytdlp.go` — `EnsureYtDlp` (lazy `sync.Once` install of yt-dlp + best-effort ffmpeg), `NewYtDlpCommand`
+- [x] `internal/core/ytdlp.go` — `EnsureYtDlp` (lazy `sync.Once` install of yt-dlp + best-effort ffmpeg — see `docs/DECISIONS.md` DECISION-001 for why lazy install was chosen over matching upstream's npm-postinstall-time install), `NewYtDlpCommand`
 - [x] `internal/core/metadata.go` — `FetchVideoMetadata` (ytInitialPlayerResponse tier, JSON-LD tier, `<meta>` tag tier)
 - [x] `go build ./... && go vet ./...` — clean
 - [x] `internal/core/metadata_test.go` — tests for the pure/testable helpers (`extractMetaTag`, `keywordsToString`, `atoiSafe`, `fillFromJSONLD` incl. `@graph` and no-overwrite behavior). `FetchVideoMetadata` itself is a live network call and intentionally untested at the unit level.
@@ -50,11 +50,39 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done
 - [x] `completions`: used cobra's **built-in** `completion` subcommand (bash/zsh/fish/powershell) instead of hand-porting the TS's literal bash/zsh script strings — the deliberate simplification called out in `docs/PLAN.md`. No `internal/cli/completions.go` file exists; nothing needed to be written for it.
 - [x] Smoke-tested manually: no-args help output, `--version`, invalid-URL error path (`error: invalid YouTube URL or video ID: "..."`, exit 1, matches TS format), `completion bash` produces a real completion script
 - [x] `go build ./... && go vet ./... && gofmt -l .` — clean; `go test ./...` — clean (30 core tests still passing; no new unit tests added here since this layer is I/O/CLI-wiring, consistent with the task 6 kickoff note)
-- Known minor divergences from the TS CLI (judged not worth matching exactly — noted here for transparency): cobra's built-in unknown-command message differs in wording from the TS custom handler; `metadata --json` output has alphabetically-sorted keys (Go's `encoding/json` sorts map keys) instead of the TS object's insertion order — both are semantically valid JSON, order is not meaningful to consumers like `jq`.
+- Known minor divergences from the TS CLI, logged as deliberate decisions rather than bugs — see `docs/DECISIONS.md` DECISION-003 (cobra completion vs hand-ported scripts), DECISION-004 (`metadata --json` key order), DECISION-005 (unknown-command message wording).
 - **Status: DONE**
 
 ## 7. Build internal/mcpserver with official go-sdk (youtube-mcp)
 - [ ] Not started.
+
+### Plan (per `docs/PLAN.md`'s "Package-by-package porting notes")
+
+- Typed input structs per distinct input shape (`urlLangInput{URL, Language}`, `searchInput{URL, Query, Language}`, `downloadVideoInput{URL, Quality, OutputDir}`, `downloadAudioInput{URL, Format, OutputDir}`, `downloadTranscriptInput{URL, Language, OutputDir}`), with `json`/`jsonschema` tags mirroring the TS `inputSchema` objects.
+- Register all 10 tools via `mcp.AddTool(server, &mcp.Tool{Name: ..., Description: ...}, handlerFunc)`: `get_transcript`, `get_transcript_timed`, `get_transcript_timestamps` (alias of timed), `get_metadata`, `get_video_metadata` (alias), `search_transcript`, `search_in_transcript` (alias), `download_video`, `download_audio`, `download_transcript`, `download_transcript_timed`. Aliases = two `AddTool` calls pointing at the same Go handler function, mirroring the TS `switch` statement's fallthrough cases.
+- Handlers build `*mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: ...}}, IsError: bool}` directly (confirmed API shape in task 1's `go doc` research) and return a zero-value output — matching the TS server's `{ content: [...], isError }` pattern exactly, not the SDK's structured-output auto-marshaling path.
+- `download_video`/`download_audio`/`download_transcript(_timed)` handlers must call `core.ResolveOutputDir(args.OutputDir)` and return an `isError` result (not a Go error) when it's empty, matching the TS "Invalid outputDir: must be within the home or temp directory." behavior.
+- `cmd/youtube-mcp/main.go`: `mcp.NewServer(&mcp.Implementation{Name: "youtube-mcp-cli", Version: version}, nil)`, register tools, `server.Run(ctx, &mcp.StdioTransport{})`.
+
+### Definition of Done
+
+- All 10 tools (incl. the 3 alias pairs) registered via `mcp.AddTool` and callable.
+- Each alias tool (`get_transcript_timestamps`, `get_video_metadata`, `search_in_transcript`) returns output identical to its canonical counterpart for the same input.
+- `download_video`/`download_audio`/`download_transcript(_timed)` return an `isError` `CallToolResult` (not a crash, not an unhandled Go error) when `core.ResolveOutputDir` rejects the given `outputDir`.
+- Invalid `url`/missing required args produce a clear `isError` result, not a panic or protocol-level error.
+- `cmd/youtube-mcp` starts, connects over stdio, and stays running until the client disconnects or the process is killed.
+- `go build ./... && go vet ./... && go test ./...` clean; no regressions in the existing `internal/core`/`internal/cli` test suite.
+
+### Test Plan
+
+- **Unit tests**: none anticipated up front — this task is almost entirely I/O/protocol wiring around already-tested `internal/core` functions. If any pure helper emerges (e.g. building `CallToolResult` content, mapping an alias name to its canonical handler), it gets a TDD-style unit test per the project's standard process (`CLAUDE.md`), same as `pickVttFile`/`qualityFormat` did.
+- **Manual smoke test** (per task 9): run `go run ./cmd/youtube-mcp`, connect with a real MCP client (an inspector tool, or Claude Code itself via a temporary `.mcp.json` entry), and call each of the 10 tools once against a real video ID (e.g. `dQw4w9WgXcQ`) — confirm the 3 alias pairs return identical output to their canonical tool, and confirm an intentionally-invalid `outputDir` (e.g. `/etc`) returns `isError: true` rather than crashing the server.
+
+This Definition of Done + Test Plan was written and reviewed *before* starting
+implementation, per the project's task-approval process (see `CLAUDE.md`) —
+so a future session or reviewer can see exactly what this task was scoped and
+approved to do, without having to reconstruct it from an ephemeral Plan Mode
+session.
 
 ## 8. Add unit tests for core pure functions
 - [x] videoid + format tests done as part of task 2 (see above)
@@ -96,6 +124,10 @@ New files on the fix branch: `internal/core/ffmpeg_prewarm.go` (+ test),
 `internal/core/ytdlp_test.go`. Modified: `internal/core/transcript.go` (+ test),
 `internal/core/ytdlp.go`, `internal/core/download.go`.
 
+The ffmpeg pre-warm fix's platform scope (`windows/amd64`, `linux/amd64`
+only) is logged as `docs/DECISIONS.md` DECISION-006, since it's a deliberate
+scoping choice, not part of the bug itself.
+
 ---
 
 ## Session status: PAUSED after task 6 on `main` / bug fixes complete on `fix/bug-001-002-subtitle-and-ffmpeg` (awaiting merge decision)
@@ -122,11 +154,5 @@ numbered task and ask the human whether to continue, and update this ledger
 ## Resume checklist for next session
 1. Read this file + `docs/PLAN.md` first.
 2. Run `cd go-youtube-mcp-cli && go build ./... && go vet ./... && go test ./...` to confirm the current state still holds (should be clean, 30 tests passing).
-3. Start task 7 (`internal/mcpserver`, official `github.com/modelcontextprotocol/go-sdk`) per `docs/PLAN.md`'s "Package-by-package porting notes":
-   - Typed input structs per distinct input shape (`urlLangInput{URL, Language}`, `searchInput{URL, Query, Language}`, `downloadVideoInput{URL, Quality, OutputDir}`, `downloadAudioInput{URL, Format, OutputDir}`, `downloadTranscriptInput{URL, Language, OutputDir}`), with `json`/`jsonschema` tags mirroring the TS `inputSchema` objects.
-   - Register all 10 tools via `mcp.AddTool(server, &mcp.Tool{Name: ..., Description: ...}, handlerFunc)`: `get_transcript`, `get_transcript_timed`, `get_transcript_timestamps` (alias of timed), `get_metadata`, `get_video_metadata` (alias), `search_transcript`, `search_in_transcript` (alias), `download_video`, `download_audio`, `download_transcript`, `download_transcript_timed`. Aliases = two `AddTool` calls pointing at the same Go handler function, mirroring the TS `switch` statement's fallthrough cases.
-   - Handlers build `*mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: ...}}, IsError: bool}` directly (confirmed API shape in task 1's `go doc` research) and return a zero-value output — matching the TS server's `{ content: [...], isError }` pattern exactly, not the SDK's structured-output auto-marshaling path.
-   - `download_video`/`download_audio`/`download_transcript(_timed)` handlers must call `core.ResolveOutputDir(args.OutputDir)` and return an `isError` result (not a Go error) when it's empty, matching the TS "Invalid outputDir: must be within the home or temp directory." behavior.
-   - `cmd/youtube-mcp/main.go`: `mcp.NewServer(&mcp.Implementation{Name: "youtube-mcp-cli", Version: version}, nil)`, register tools, `server.Run(ctx, &mcp.StdioTransport{})`.
-   - This is almost entirely I/O/protocol wiring around already-complete `internal/core` functions — no new pure logic expected, so no new unit tests anticipated; verify via manual smoke test (e.g. an MCP inspector or a temporary client) per task 9.
+3. Start task 7 (`internal/mcpserver`, official `github.com/modelcontextprotocol/go-sdk`) — see task 7's section above for the plan, Definition of Done, and Test Plan (already reviewed/approved; do not start coding on a task without its own DoD + Test Plan filled in first — see `CLAUDE.md`).
 4. After task 7, update this ledger, then pause and ask before continuing to task 9 (final combined smoke test — task 8 is already fully covered by tests written during tasks 2, 4, and 5).

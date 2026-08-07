@@ -6,11 +6,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Go port of [`johncegom/youtube-mcp-cli`](https://github.com/johncegom/youtube-mcp-cli) (a TypeScript project): a YouTube transcript/metadata/download tool exposed both as an MCP stdio server and a standalone CLI, with no YouTube API key — metadata comes from scraping the watch-page HTML and transcripts/downloads come from shelling out to `yt-dlp`. Phase 1 (in progress) is a faithful port of the existing TS functionality; no new features beyond what the TS version has are in scope yet.
 
-**Before doing any work here, read `docs/PLAN.md` (the full design/porting plan), `docs/LEDGER.md` (what's actually been built so far, and the exact next step), and `docs/BUGS.md` (tracked bugs — including inherited-from-upstream ones — pending a decision) — the ledger is the source of truth for progress, not this file.**
+**Before doing any work here, read `docs/PLAN.md` (the full design/porting plan), `docs/LEDGER.md` (what's actually been built so far, and the exact next step), `docs/BUGS.md` (tracked bugs — including inherited-from-upstream ones — pending a decision), and `docs/DECISIONS.md` (deliberate design/scope tradeoffs made along the way) — the ledger is the source of truth for progress, not this file.**
+
+### Task approval: Definition of Done + Test Plan (anti-drift control)
+
+Before starting implementation on any task in `docs/LEDGER.md`, that task's
+entry must have a **Definition of Done** (concrete, testable exit criteria)
+and a **Test Plan** (what gets unit-tested, what gets manually smoke-tested,
+and the specific commands to run) written out and reviewed — see task 7's
+entry for the pattern. This is deliberately **committed to the repo**
+(`docs/LEDGER.md`, not a Plan Mode session's ephemeral plan file under
+`~/.claude/plans/`, which nobody else and no future session can see) —
+that's the whole point: a future session or a human reviewer should be able
+to see exactly what a task was scoped and approved to do, without
+reconstructing it from a plan file that isn't part of this repository's
+history at all.
+
+Do not silently expand scope mid-task — e.g. fixing unrelated stale doc
+content "while you're in there" — even when the fix is correct. If you
+notice something out of scope while working, either ask first or log it
+separately (as its own decision/task), rather than folding it into the
+current task's diff unannounced.
 
 ### Bug tracking
 
 When a bug is found (including latent bugs inherited from the upstream TS project that a faithful port reproduces), it goes into `docs/BUGS.md`, not a silent fix. Add an entry with symptom and root cause (or say explicitly that root cause is unknown), propose options if there's an obvious fix, and **wait for a human decision before applying it** — the same pause-and-ask discipline that applies to `docs/LEDGER.md`'s numbered tasks applies to bugs.
+
+### Decision log
+
+When you make a deliberate design/scope tradeoff during implementation —
+not a bug, a genuine choice where a reasonable reviewer might pick
+differently (e.g. "use library X's built-in Y instead of porting upstream's
+hand-written Z") — log it in `docs/DECISIONS.md`: context, decision,
+alternatives considered, consequences. Don't log every micro-choice; log
+ones worth a reviewer knowing about. See `docs/DECISIONS.md`'s own header
+for the precise boundary against `docs/BUGS.md`.
 
 ## Commands
 
@@ -39,7 +69,7 @@ This project follows TDD strictly, and **the implementation must adapt to the te
 
 I/O-bound code that can't be unit-tested this way (live HTTP scraping in `FetchVideoMetadata`, subprocess calls to `yt-dlp` in `fetchSegments`) is intentionally left uncovered by unit tests and is instead exercised by the end-to-end smoke test (final task in the plan). Pure logic embedded in otherwise I/O-heavy functions should still be factored out and tested (see how `transcript.go` splits pure presentation/search/error-classification functions from the I/O `fetchSegments`/`SaveTranscriptFile`).
 
-**After completing each numbered task in `docs/LEDGER.md`, update that file first** — check off what was done, note any deviations, update the "Resume checklist" pointer to the next task — **then pause and ask the human whether to continue** before starting the next task. Do not chain multiple ledger tasks together in one uninterrupted run, and do not ask before the ledger reflects the work just finished.
+**After completing each numbered task in `docs/LEDGER.md`, update that file first** — check off what was done, note any deviations, update the "Resume checklist" pointer to the next task — **then pause and ask the human whether to continue** before starting the next task. Do not chain multiple ledger tasks together in one uninterrupted run, and do not ask before the ledger reflects the work just finished. Before starting the *next* task, its Definition of Done + Test Plan must exist and be reviewed first (see "Task approval" above).
 
 ## Architecture
 
@@ -53,6 +83,8 @@ internal/cli/          cobra command wiring            (not yet built)
 internal/mcpserver/    MCP tool registration/handlers  (not yet built)
 docs/PLAN.md           full design plan + source-repo analysis + porting notes
 docs/LEDGER.md         task-by-task progress tracker + resume checklist — READ FIRST
+docs/BUGS.md           tracked bugs (symptom, root cause, options, decision)
+docs/DECISIONS.md      deliberate design/scope tradeoffs (not bugs)
 ```
 
 `internal/` (not `pkg/`) is deliberate: nothing here is meant to be imported by other modules.
