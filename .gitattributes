@@ -1,0 +1,7 @@
+# Normalize line endings to LF for all text files, regardless of the
+# checking-out platform's core.autocrlf setting (an explicit `eol` here
+# takes precedence over core.autocrlf). This eliminates the CRLF/LF
+# working-tree churn seen repeatedly on Windows checkouts during this
+# project's development, where `git status` would flag files as modified
+# even though `git diff` showed zero real content differences.
+* text=auto eol=lf
