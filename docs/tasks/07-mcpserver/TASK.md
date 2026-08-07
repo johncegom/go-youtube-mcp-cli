@@ -1,6 +1,6 @@
 # Task 7: Build internal/mcpserver with official go-sdk (youtube-mcp)
 
-**Status:** not started
+**Status:** done
 
 ## Plan (per `docs/PLAN.md`'s "Package-by-package porting notes")
 
@@ -11,7 +11,7 @@ Uses the official `github.com/modelcontextprotocol/go-sdk`.
   OutputDir}`, `downloadAudioInput{URL, Format, OutputDir}`,
   `downloadTranscriptInput{URL, Language, OutputDir}`), with `json`/
   `jsonschema` tags mirroring the TS `inputSchema` objects.
-- Register all 10 tools via `mcp.AddTool(server, &mcp.Tool{Name: ...,
+- Register all 11 tools via `mcp.AddTool(server, &mcp.Tool{Name: ...,
   Description: ...}, handlerFunc)`: `get_transcript`, `get_transcript_timed`,
   `get_transcript_timestamps` (alias of timed), `get_metadata`,
   `get_video_metadata` (alias), `search_transcript`, `search_in_transcript`
@@ -38,17 +38,23 @@ Uses the official `github.com/modelcontextprotocol/go-sdk`.
 
 ## Definition of Done
 
-- All 10 tools (incl. the 3 alias pairs) registered via `mcp.AddTool` and callable.
-- Each alias tool (`get_transcript_timestamps`, `get_video_metadata`, `search_in_transcript`) returns output identical to its canonical counterpart for the same input.
-- `download_video`/`download_audio`/`download_transcript(_timed)` return an `isError` `CallToolResult` (not a crash, not an unhandled Go error) when `core.ResolveOutputDir` rejects the given `outputDir`.
-- Invalid `url`/missing required args produce a clear `isError` result, not a panic or protocol-level error.
-- `cmd/youtube-mcp` starts, connects over stdio, and stays running until the client disconnects or the process is killed.
-- `go build ./... && go vet ./... && go test ./...` clean; no regressions in the existing `internal/core`/`internal/cli` test suite.
+- [x] All 11 tools (8 canonical + 3 aliases) registered via `mcp.AddTool` and callable.
+- [x] Each alias tool (`get_transcript_timestamps`, `get_video_metadata`, `search_in_transcript`) returns output identical to its canonical counterpart for the same input.
+- [x] `download_video`/`download_audio`/`download_transcript(_timed)` return an `isError` `CallToolResult` (not a crash, not an unhandled Go error) when `core.ResolveOutputDir` rejects the given `outputDir`.
+- [x] Invalid `url`/missing required args produce a clear `isError` result, not a panic or protocol-level error.
+- [x] `cmd/youtube-mcp` starts, connects over stdio, and stays running until the client disconnects or the process is killed.
+- [x] `go build ./... && go vet ./... && go test ./...` clean; no regressions in the existing `internal/core`/`internal/cli` test suite.
 
 ## Test Plan
 
-- **Unit tests**: none anticipated up front — this task is almost entirely I/O/protocol wiring around already-tested `internal/core` functions. If any pure helper emerges (e.g. building `CallToolResult` content, mapping an alias name to its canonical handler), it gets a TDD-style unit test per the project's standard process (`CLAUDE.md`), same as `pickVttFile`/`qualityFormat` did.
-- **Manual smoke test** (per task 9): run `go run ./cmd/youtube-mcp`, connect with a real MCP client (an inspector tool, or Claude Code itself via a temporary `.mcp.json` entry), and call each of the 10 tools once against a real video ID (e.g. `dQw4w9WgXcQ`) — confirm the 3 alias pairs return identical output to their canonical tool, and confirm an intentionally-invalid `outputDir` (e.g. `/etc`) returns `isError: true` rather than crashing the server.
+- **Unit tests**: none needed — no new pure logic emerged; this task was, as anticipated, entirely I/O/protocol wiring around already-tested `internal/core` functions.
+- **Manual smoke test**: done via a throwaway MCP client program (`github.com/modelcontextprotocol/go-sdk/mcp`'s `NewClient`/`CommandTransport`, spawning `go run ./cmd/youtube-mcp` as a subprocess over stdio — written temporarily as `cmd/mcpsmoke`, deleted before committing, never part of the shipped product). Called all 11 tools against a real video (`dQw4w9WgXcQ`):
+  - All 3 alias pairs (`get_transcript_timed`/`get_transcript_timestamps`, `get_metadata`/`get_video_metadata`, `search_transcript`/`search_in_transcript`) returned byte-identical output to their canonical tool.
+  - `download_video`/`download_audio` (fire-and-forget) both actually completed — confirmed the resulting `.mp4`/`.mp3` files existed in the temp output dir after the client disconnected, so the detached goroutine survives past session close in practice, not just in theory.
+  - `download_transcript`/`download_transcript_timed` produced real `.md` files, confirmed via the returned path.
+  - `download_video` with `outputDir: "/etc"` returned `isError: true` with the exact expected message, no crash.
+  - `get_transcript` with an invalid URL (`"not-a-valid-url"`) returned `isError: true` with the exact expected message, no crash.
+  - `ListTools` confirmed exactly 11 tool entries — 8 canonical tools + 3 aliases (`get_transcript_timestamps`, `get_video_metadata`, `search_in_transcript`); `get_transcript` itself has no alias.
 
 This Definition of Done + Test Plan was written and reviewed *before*
 starting implementation, per the project's task-approval process (see
