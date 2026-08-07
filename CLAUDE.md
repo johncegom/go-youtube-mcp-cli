@@ -53,9 +53,9 @@ go test ./internal/core/... -run TestParseVtt -v   # run a single test by name
 gofmt -w <files>                        # format — run before every commit/verification pass
 ```
 
-There is no Makefile, linter config, or CI config in this repo yet — `go build`, `go vet`, `go test`, and `gofmt` are the whole toolchain.
+There is no Makefile or linter config in this repo — `go build`, `go vet`, `go test`, and `gofmt` are the whole local toolchain. CI (`.github/workflows/ci.yml`) runs the same four checks on GitHub Actions for every push/PR to `main` (Ubuntu + Windows matrix for build/vet/test, Ubuntu-only for gofmt — see `docs/tasks/ci-cd/TASK.md`); branch protection isn't enabled (private repo, free tier — see `docs/DECISIONS.md` DECISION-007), so CI reports status but doesn't block a merge yet.
 
-Two binaries live under `cmd/`: `cmd/youtube-cli` (CLI, built and working — `go run ./cmd/youtube-cli <args>`) and `cmd/youtube-mcp` (MCP server, not yet built — see `docs/tasks/07-mcpserver/TASK.md`).
+Two binaries live under `cmd/`, both built and working: `cmd/youtube-cli` (CLI — `go run ./cmd/youtube-cli <args>`) and `cmd/youtube-mcp` (MCP stdio server — `go run ./cmd/youtube-mcp`).
 
 ## Required workflow: strict TDD
 
@@ -77,10 +77,10 @@ One Go module, two `cmd/` binaries, one shared `internal/core` package — the i
 
 ```
 cmd/youtube-cli/       cobra-based CLI entrypoint      (built)
-cmd/youtube-mcp/       MCP stdio server entrypoint     (not yet built)
+cmd/youtube-mcp/       MCP stdio server entrypoint     (built)
 internal/core/         all shared logic — see below
 internal/cli/          cobra command wiring            (built)
-internal/mcpserver/    MCP tool registration/handlers  (not yet built)
+internal/mcpserver/    MCP tool registration/handlers  (built)
 docs/PLAN.md           full design plan + source-repo analysis + porting notes
 docs/LEDGER.md         index: current status + links to per-task detail — READ FIRST
 docs/tasks/<slug>/TASK.md   full detail for one task (checklist, notes, deviations, DoD, Test Plan)
@@ -110,9 +110,18 @@ docs/DECISIONS.md      deliberate design/scope tradeoffs (not bugs)
 the full breakdown. Uses cobra's built-in `completion` subcommand rather
 than hand-porting the original's bash/zsh completion scripts.
 
-### Planned (not yet built) — see `docs/tasks/07-mcpserver/TASK.md` for full detail
+### `internal/mcpserver` — MCP stdio server, built (`cmd/youtube-mcp`)
 
-- **`internal/mcpserver`**: built on the official `github.com/modelcontextprotocol/go-sdk`, registering 10 tools via `mcp.AddTool` with typed input structs (several are name-aliases pointing at the same handler, mirroring the TS server's alias tool names).
+Built on the official `github.com/modelcontextprotocol/go-sdk`, registering
+11 tools via `mcp.AddTool` — 8 canonical tools plus 3 aliases
+(`get_transcript_timestamps`, `get_video_metadata`, `search_in_transcript`)
+that point at the same Go handler function as their canonical counterpart.
+Every handler's `Out` type parameter is `any`, so responses are built by
+hand as `*mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{...}},
+IsError: bool}`, matching the upstream TS server's `{ content, isError }`
+shape exactly rather than the SDK's structured-output auto-marshaling path.
+See `docs/tasks/07-mcpserver/TASK.md` for the full breakdown and smoke-test
+results.
 
 ### Key external dependencies and why
 

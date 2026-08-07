@@ -26,7 +26,7 @@ Fetched directly from GitHub (not cloned locally — this was a design/analysis 
   - `downloadVideoBlocking` / `downloadAudioBlocking` — blocking (`spawn` with `stdio: inherit`), used by CLI (streams yt-dlp's own progress bar to the terminal).
   - `QUALITY_FORMAT_MAP` — five named quality presets mapped to yt-dlp format-selector strings.
 - `packages/cli/src/index.ts` (279 lines) — `commander`-based CLI: `transcript`, `search`, `metadata`, `download`, `completions` subcommands, a spinner for TTY progress, hand-written bash/zsh completion scripts.
-- `packages/mcp/src/index.ts` (331 lines) — stdio MCP server exposing 10 tools (several are name aliases of each other): `get_transcript`, `get_transcript_timed`, `get_transcript_timestamps` (alias), `get_metadata`, `get_video_metadata` (alias), `search_transcript`, `search_in_transcript` (alias), `download_video`, `download_audio`, `download_transcript`, `download_transcript_timed`.
+- `packages/mcp/src/index.ts` (331 lines) — stdio MCP server exposing 11 tools (3 are name aliases of a canonical tool): `get_transcript`, `get_transcript_timed`, `get_transcript_timestamps` (alias), `get_metadata`, `get_video_metadata` (alias), `search_transcript`, `search_in_transcript` (alias), `download_video`, `download_audio`, `download_transcript`, `download_transcript_timed`.
 
 No test files exist anywhere in the source repo.
 
@@ -83,7 +83,7 @@ One Go module, two `cmd/` binaries, shared `internal/core` — the idiomatic Go 
 - One typed input struct per distinct input shape (e.g. `urlLangInput{URL, Language string}`, `searchInput{URL, Query, Language string}`, `downloadVideoInput{URL, Quality, OutputDir string}`, etc.) with `json`+`jsonschema` tags mirroring the TS `inputSchema` objects (including `enum` constraints for `quality`/`format` via jsonschema tags, and defaults noted in `Description`).
 - Each tool handler follows the SDK's `func(ctx, *mcp.CallToolRequest, Input) (*mcp.CallToolResult, Output, error)` shape; since all responses are single free-text blocks (no structured output consumed elsewhere), handlers build `&mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: ...}}, IsError: bool}` directly and return a zero-value `Output{}` — same pattern the TS server uses (`{ content: [...], isError }`).
 - Alias tools (`get_transcript_timed`/`get_transcript_timestamps`, `get_metadata`/`get_video_metadata`, `search_transcript`/`search_in_transcript`) are registered via two `mcp.AddTool` calls pointing at the same handler function, exactly mirroring the TS `switch` statement's fallthrough `case` pairs.
-- `main.go`: `mcp.NewServer(&mcp.Implementation{Name: "youtube-mcp-cli", Version: version}, nil)`, register all 10 tools, `server.Run(ctx, &mcp.StdioTransport{})`.
+- `main.go`: `mcp.NewServer(&mcp.Implementation{Name: "youtube-mcp-cli", Version: version}, nil)`, register all 11 tools, `server.Run(ctx, &mcp.StdioTransport{})`.
 
 ## Dependencies (go.mod)
 
@@ -103,4 +103,4 @@ No dependency is needed for YouTube API access — same as the original, everyth
   - `internal/core/transcript_test.go` — `parseVtt` against a fixture VTT string, verifying dedupe and tag/entity stripping.
 - **Build**: `go build ./...` for both binaries.
 - **CLI smoke test**: run `go run ./cmd/youtube-cli transcript dQw4w9WgXcQ --timestamps`, `... metadata dQw4w9WgXcQ --json`, `... download dQw4w9WgXcQ --audio` against a real public video, confirm output/format matches the TS CLI's behavior (this exercises the go-ytdlp auto-install path on a clean machine/cache too).
-- **MCP smoke test**: run `go run ./cmd/youtube-mcp` and drive it with an MCP client (e.g. the `mcp` CLI inspector, or Claude Code itself via a temporary `.mcp.json` entry) to call each of the 10 tools once, confirming alias tools return identical results to their canonical counterpart.
+- **MCP smoke test**: run `go run ./cmd/youtube-mcp` and drive it with an MCP client (e.g. the `mcp` CLI inspector, or Claude Code itself via a temporary `.mcp.json` entry) to call each of the 11 tools once, confirming the 3 alias tools return identical results to their canonical counterpart.

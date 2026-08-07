@@ -31,9 +31,9 @@ this index) before pausing.
 | 4 | Core: transcript (VTT fetch/parse/search/save) | [x] done | [docs/tasks/04-core-transcript/TASK.md](tasks/04-core-transcript/TASK.md) |
 | 5 | Core: download (video/audio, blocking + fire-and-forget) | [x] done | [docs/tasks/05-core-download/TASK.md](tasks/05-core-download/TASK.md) |
 | 6 | CLI with cobra (`youtube-cli`) | [x] done | [docs/tasks/06-cli-cobra/TASK.md](tasks/06-cli-cobra/TASK.md) |
-| 7 | MCP server with official go-sdk (`youtube-mcp`) | [ ] not started (DoD + Test Plan approved) | [docs/tasks/07-mcpserver/TASK.md](tasks/07-mcpserver/TASK.md) |
+| 7 | MCP server with official go-sdk (`youtube-mcp`) | [x] done | [docs/tasks/07-mcpserver/TASK.md](tasks/07-mcpserver/TASK.md) |
 | 8 | Unit tests for core pure functions | [x] done (folded into other tasks) | [docs/tasks/08-unit-tests/TASK.md](tasks/08-unit-tests/TASK.md) |
-| 9 | Build + smoke test both binaries | [~] in progress | [docs/tasks/09-smoke-test/TASK.md](tasks/09-smoke-test/TASK.md) |
+| 9 | Build + smoke test both binaries | [x] done | [docs/tasks/09-smoke-test/TASK.md](tasks/09-smoke-test/TASK.md) |
 | — | Out-of-band: fix BUG-001 + BUG-002 | [x] fixed, merged to `main` | [docs/tasks/bugfix-001-002/TASK.md](tasks/bugfix-001-002/TASK.md) |
 | — | Out-of-band: fuzz tests for untrusted-input parsers | [x] done | [docs/tasks/fuzz-tests/TASK.md](tasks/fuzz-tests/TASK.md) |
 | — | Out-of-band: task-level Definition of Done/Test Plan + decision log | [x] done | see `CLAUDE.md` process rules + `docs/DECISIONS.md` |
@@ -41,21 +41,23 @@ this index) before pausing.
 
 ## Current status
 
-Tasks 1–6, 8 done; task 9 partially done (CLI half only). Task 7 (MCP
-server) is next — it's the only remaining blocker for finishing task 9, and
-already has an approved Definition of Done + Test Plan (see its `TASK.md`).
-Both out-of-band items (bug fixes, fuzz tests) are complete, as is the
-anti-drift process work (per-task DoD/Test Plan requirement + decision log).
+**All 9 numbered tasks are done — Phase 1 (the faithful Go port) is
+complete.** Both binaries (`cmd/youtube-cli`, `cmd/youtube-mcp`) build and
+are manually smoke-tested end to end against real YouTube videos. All
+out-of-band items (bug fixes, fuzz tests, the anti-drift process work, CI/CD)
+are also complete. Remaining known gaps, both deliberate and documented:
+BUG-001/002 fixes cover only the platforms verified (`docs/DECISIONS.md`
+DECISION-006), and branch protection isn't enabled (DECISION-007).
 
-This restructure (splitting the ledger into per-task files under
-`docs/tasks/`, plus the DoD/Test Plan and decision-log additions) was done
-across two branches — `docs/ledger-task-split` and
-`docs/task-dod-and-decision-log` — reconciled together on
-`docs/reconcile-anti-drift`.
+There is no task 10 yet — Phase 1's scope (per `docs/PLAN.md`) is exhausted.
+Any further work (Phase 2 features, expanding CI enforcement, etc.) needs
+its own scoping pass (PLAN.md update or a new out-of-band entry with its own
+`TASK.md` + Definition of Done + Test Plan) before starting, per the
+project's standing process.
 
 ## Resume checklist for next session
 
 1. Read this index first (not the individual task files, unless you need one).
-2. Run `go build ./... && go vet ./... && go test ./...` to confirm the current state holds.
-3. Open `docs/tasks/07-mcpserver/TASK.md` and follow its Definition of Done + Test Plan — that's the next task, already scoped and approved.
+2. Run `go build ./... && go vet ./... && go test ./...` to confirm the current state still holds.
+3. Phase 1 is done — there's no pre-scoped next task. Check with the human for direction (Phase 2 features? something else?) before starting new work; scope it (DoD + Test Plan, per `CLAUDE.md`) before writing code.
 4. After finishing a task: update **that task's `TASK.md`** with full detail first, then update this index's status column/checkbox for it, then pause and ask the human before starting the next task. If the task involved a deliberate design/scope tradeoff, log it in `docs/DECISIONS.md` too.
