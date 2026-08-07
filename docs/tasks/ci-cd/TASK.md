@@ -32,23 +32,33 @@ push/PR, and branch protection makes a red run actually block merging.
 
 ## Definition of Done
 
-- `.github/workflows/ci.yml` exists with `build-test` (2-OS matrix) and
+- [x] `.github/workflows/ci.yml` exists with `build-test` (2-OS matrix) and
   `gofmt` (Ubuntu-only) jobs, triggered on push-to-`main` and
   PRs-targeting-`main`.
-- Both jobs actually run and pass on GitHub (confirmed via a real run, not
-  just local dry-run).
-- Branch protection on `main` requires all `build-test` matrix legs and
-  `gofmt` to pass before merge.
-- Negative-path proof: a deliberately-broken change on a scratch branch/PR
-  produces a red CI run and GitHub visibly blocks merging it; the break is
-  then reverted/discarded.
+- [x] Both jobs actually run and pass on GitHub (confirmed via a real run,
+  not just local dry-run) — both on the `ci/github-actions` PR (#1) and
+  again on the push-to-`main` merge commit.
+- [ ] ~~Branch protection on `main` requires all `build-test` matrix legs
+  and `gofmt` to pass before merge.~~ **Blocked, not done** — GitHub
+  rejected this: branch protection on a private repo requires GitHub Pro on
+  the free tier (`403: Upgrade to GitHub Pro or make this repository public`).
+  Put to the human; decided to keep the repo private and skip enforcement
+  for now. See `docs/DECISIONS.md` DECISION-007 for the full tradeoff and
+  exactly how to re-enable this later.
+- [x] Negative-path proof (scaled down from the original plan, since there's
+  no branch protection to prove blocks a merge): a deliberately-broken
+  change on a scratch branch/PR produces a real red CI run on GitHub, then
+  the break is discarded without merging.
 
 ## Test Plan
 
-- Local dry run of `go build ./...`, `go vet ./...`, `go test ./...`,
+- [x] Local dry run of `go build ./...`, `go vet ./...`, `go test ./...`,
   `gofmt -l .` against current `main` first (clean baseline confirmed).
-- Push the workflow branch, open a PR, confirm both jobs go green on GitHub
-  for all matrix legs.
-- Apply branch protection via `gh api` PUT, verify via GET.
-- Scratch branch with an intentional test failure → PR → confirm CI red +
-  merge blocked → close/delete without merging.
+- [x] Push the workflow branch, open a PR, confirm both jobs go green on
+  GitHub for all matrix legs.
+- [x] Apply branch protection via `gh api` PUT — **failed with 403** (see
+  DoD above); confirmed this is a real platform constraint, not a mistake
+  in the request, by checking `gh repo view --json isPrivate` (`true`).
+- [x] Scratch branch with an intentional test failure → PR → confirm CI red
+  → close/delete without merging (no "merge blocked" assertion, since
+  enforcement isn't enabled).
