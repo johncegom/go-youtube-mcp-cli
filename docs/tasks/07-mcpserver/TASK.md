@@ -55,6 +55,10 @@ Uses the official `github.com/modelcontextprotocol/go-sdk`.
   - `download_video` with `outputDir: "/etc"` returned `isError: true` with the exact expected message, no crash.
   - `get_transcript` with an invalid URL (`"not-a-valid-url"`) returned `isError: true` with the exact expected message, no crash.
   - `ListTools` confirmed exactly 11 tool entries — 8 canonical tools + 3 aliases (`get_transcript_timestamps`, `get_video_metadata`, `search_in_transcript`); `get_transcript` itself has no alias.
+- **Independent re-verification**: re-ran the same throwaway-client technique in a later session against a second, much longer real video (90 min, `Bu0xNDLNORU`) via `get_video_metadata`/`get_transcript_timed` — no errors, no crash, ~4870-line transcript handled cleanly.
+- **Fuzz tests** (`internal/mcpserver/tools_test.go`, added after the initial smoke test): the handlers themselves aren't fuzzed — they're I/O-bound (network calls) and fuzzing them in a tight loop would hammer YouTube's endpoints, exactly the anti-pattern flagged in this project's own concurrency analysis. Instead, fuzzed the two pure response-building helpers, since their input can originate from scraped HTML, foreign-language transcripts, or directly from an MCP client's arguments:
+  - `FuzzTextResult` — round-trips arbitrary text (including invalid UTF-8, control characters, fmt-verb-shaped strings) through unmodified; 442K executions, zero failures.
+  - `FuzzInvalidURLResult` — confirms no panic and a well-formed `isError` result for arbitrary URL input; deliberately does *not* assert literal substring containment, since `%q` intentionally escapes quotes/backslashes for readability (a wrong invariant was caught and fixed before running the fuzzer, not after); 113K executions, zero failures.
 
 This Definition of Done + Test Plan was written and reviewed *before*
 starting implementation, per the project's task-approval process (see
