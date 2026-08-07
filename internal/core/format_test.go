@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestFormatTimestamp(t *testing.T) {
 	cases := []struct {
@@ -70,4 +73,47 @@ func TestSanitizeTitle(t *testing.T) {
 			t.Errorf("SanitizeTitle(%q) = %q, want %q", tc.title, got, tc.want)
 		}
 	}
+}
+
+// illegalFilenameChars are the characters SanitizeTitle must never let
+// through — used by the fuzz test below to check that invariant directly,
+// rather than relying on illegalFilenameCharsRe (which would just be
+// testing the regex against itself).
+var illegalFilenameChars = []string{`\`, `/`, `:`, `*`, `?`, `"`, `<`, `>`, `|`}
+
+// FuzzSanitizeTitle checks SanitizeTitle's core invariants against
+// arbitrary input: the result is never empty (always falls back to
+// "video"), and never contains a path separator or other filesystem-illegal
+// character. This is security-relevant, not just cosmetic — video titles
+// are attacker-influenced (set by whoever uploaded the video) and this is
+// the only sanitization applied before the result is used to build a real
+// filesystem path in transcript.go (SaveTranscriptFile) and download.go
+// (StartVideoDownload/StartAudioDownload's predicted paths).
+func FuzzSanitizeTitle(f *testing.F) {
+	seeds := []string{
+		"Normal Title",
+		`Weird: "Title" / \ * ? < > |`,
+		"___leading and trailing___",
+		"",
+		"***",
+		"../../../etc/passwd",
+		"..\\..\\Windows\\System32\\config",
+		"con", // reserved device name on Windows
+		strings.Repeat("a", 1000),
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	f.Fuzz(func(t *testing.T, title string) {
+		got := SanitizeTitle(title)
+		if got == "" {
+			t.Errorf("SanitizeTitle(%q) = \"\", want a non-empty fallback", title)
+		}
+		for _, c := range illegalFilenameChars {
+			if strings.Contains(got, c) {
+				t.Errorf("SanitizeTitle(%q) = %q, still contains illegal filename character %q", title, got, c)
+			}
+		}
+	})
 }
