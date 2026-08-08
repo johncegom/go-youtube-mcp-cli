@@ -52,10 +52,10 @@ default) — see `README.md` for install instructions and
 out-of-band items (bug fixes, fuzz tests, the anti-drift process work,
 CI/CD) are also complete. Remaining known gaps, both deliberate and
 documented: BUG-001/002 fixes cover only the platforms verified
-(`docs/DECISIONS.md` DECISION-006), branch protection isn't enabled
-(DECISION-007), and a pre-existing (not task-10-introduced) CRLF/gofmt
-working-tree issue on 3 files is flagged in task 10's `TASK.md` 10.6,
-pending a human decision on whether to run `git add --renormalize .`.
+(`docs/DECISIONS.md` DECISION-006), and branch protection isn't enabled
+(DECISION-007). A pre-existing (not task-10-introduced) CRLF/gofmt
+working-tree issue on 3 files, previously flagged in task 10's `TASK.md`
+10.6, has since been fixed on the `task-10-packaging` branch.
 
 **Deliberately deferred out of task 10, and not yet scoped as a future
 task:** an HTTP/SSE-based MCP transport for genuinely hosted/remote,

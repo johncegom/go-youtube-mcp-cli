@@ -1,8 +1,8 @@
 # Task 10: Package the project into runnable distributable artifacts (CLI + local-MCP)
 
-**Status:** done, with one pre-existing, out-of-scope issue flagged for a
-human decision (10.6's gofmt/CRLF noise — not introduced by this task, see
-below).
+**Status:** done. The pre-existing, out-of-scope gofmt/CRLF working-tree
+issue (10.6, not introduced by this task) was fixed on this branch per
+explicit human request — see 10.6 for detail.
 
 ## Context
 
@@ -115,19 +115,20 @@ plainly.
   with the private-repo caveat stated explicitly, CLI examples, MCP config
   examples (local `go run` and Docker forms), explicit "local only, not
   hosted/remote" scope note.
-- [~] **10.6** `go build ./...`, `go vet ./...`, `go test ./...` all pass
-  (verified). `gofmt -l .` is **not** clean, but the 3 files it flags
+- [x] **10.6** `go build ./...`, `go vet ./...`, `go test ./...`,
+  `gofmt -l .` all pass (verified). The 3 pre-existing CRLF-flagged files
   (`cmd/youtube-mcp/main.go`, `internal/mcpserver/tools.go`,
-  `internal/mcpserver/tools_test.go`) are untouched by this task (confirmed
-  via `git status` — no working-tree changes to them) and flagged only
-  because they're checked out with CRLF line endings on this machine (the
-  known DECISION-008 phenomenon — `.gitattributes` normalizes newly
-  re-checked-out files but doesn't retroactively rewrite files already
-  sitting in the working tree with CRLF). Not this task's to fix
-  silently — no packaging file this task added is a `.go` file, so this
-  task introduces zero new gofmt violations. Flagging for a human decision
-  rather than touching unrelated files: worth a `git add --renormalize .`
-  as a separate, explicit action outside this task's diff.
+  `internal/mcpserver/tools_test.go`, untouched by this task's own diff —
+  DECISION-008's known phenomenon of files sitting in the working tree with
+  stale CRLF from before `.gitattributes` existed) were fixed per explicit
+  human request on this branch: `git add --renormalize .` alone didn't
+  touch the working-tree bytes (the index already matched the LF blob, so
+  there was nothing to restage), so the 3 files were rewritten to LF
+  directly (`sed -i 's/\r$//'`). `git diff` on them was empty both before
+  and after — confirms this was purely a working-tree/gofmt artifact, not
+  a real content change, matching DECISION-008's original diagnosis exactly.
+  Nothing to commit for the fix itself (no git-tracked content changed);
+  this note is the only trace of it.
 - [x] **10.7** `docs/LEDGER.md` updated (task 10 row added, "Current
   status" updated with the deferred-HTTP-transport note).
 - [x] **10.8** `docs/DECISIONS.md` updated: DECISION-009 (Debian-slim base),
@@ -155,9 +156,9 @@ own scope-drift rule a fix belongs in its own explicit action
     scratch `GOBIN`, ran both installed binaries — work correctly outside
     the repo's working directory.
   - [x] `go build ./...`, `go vet ./...`, `go test ./...` — all pass.
-  - [~] `gofmt -l .` — **not** clean, but the 3 flagged files are untouched
-    by this task (pre-existing CRLF working-tree state, see 10.6). Zero new
-    gofmt violations introduced by any file this task added.
+  - [x] `gofmt -l .` — clean. Initially flagged 3 pre-existing files
+    untouched by this task's own diff (CRLF working-tree state, see 10.6);
+    fixed on this branch per explicit human request.
 - **Not tested in this task (as scoped):** an actual tag-triggered run of
   `release.yml` against GitHub (no tag pushed); no image registry
   push/pull.
