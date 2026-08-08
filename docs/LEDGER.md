@@ -37,8 +37,9 @@ this index) before pausing.
 | — | Out-of-band: fix BUG-001 + BUG-002 | [x] fixed, merged to `main` | [docs/tasks/bugfix-001-002/TASK.md](tasks/bugfix-001-002/TASK.md) |
 | — | Out-of-band: fuzz tests for untrusted-input parsers | [x] done | [docs/tasks/fuzz-tests/TASK.md](tasks/fuzz-tests/TASK.md) |
 | — | Out-of-band: task-level Definition of Done/Test Plan + decision log | [x] done | see `CLAUDE.md` process rules + `docs/DECISIONS.md` |
-| — | Out-of-band: CI/CD (GitHub Actions; branch protection blocked, see DECISION-007) | [x] done | [docs/tasks/ci-cd/TASK.md](tasks/ci-cd/TASK.md) |
+| — | Out-of-band: CI/CD (GitHub Actions; branch protection enabled, see DECISION-012) | [x] done | [docs/tasks/ci-cd/TASK.md](tasks/ci-cd/TASK.md) |
 | 10 | Packaging: GoReleaser + GitHub Releases, `go install`, Docker image, README | [x] done | [docs/tasks/10-packaging/TASK.md](tasks/10-packaging/TASK.md) |
+| — | Out-of-band: repo made public, MIT-licensed, branch protection enabled | [x] done | see `docs/DECISIONS.md` DECISION-012 |
 
 ## Current status
 
@@ -48,13 +49,17 @@ ways: cross-compiled GitHub Release binaries (via `.goreleaser.yaml` +
 `.github/workflows/release.yml`, triggered on `v*` tags), `go install`, and
 a Docker image (`Dockerfile`, both binaries on `PATH`, `CMD ["youtube-mcp"]`
 default) — see `README.md` for install instructions and
-`docs/tasks/10-packaging/TASK.md` for full verification detail. All
-out-of-band items (bug fixes, fuzz tests, the anti-drift process work,
-CI/CD) are also complete. Remaining known gaps, both deliberate and
-documented: BUG-001/002 fixes cover only the platforms verified
-(`docs/DECISIONS.md` DECISION-006), and branch protection isn't enabled
-(DECISION-007). A pre-existing (not task-10-introduced) CRLF/gofmt
-working-tree issue on 3 files, previously flagged in task 10's `TASK.md`
+`docs/tasks/10-packaging/TASK.md` for full verification detail. The repo
+is now **public** and **MIT-licensed** (`LICENSE`, `docs/DECISIONS.md`
+DECISION-012), and branch protection on `main` is enabled (requires
+`build-test (ubuntu-latest)`, `build-test (windows-latest)`, and `gofmt`
+to pass before merge — this actually enforces CI now, not just reports
+it, closing the gap DECISION-007 originally left open). All out-of-band
+items (bug fixes, fuzz tests, the anti-drift process work, CI/CD) are also
+complete. Remaining known gap: BUG-001/002 fixes cover only the platforms
+verified (`docs/DECISIONS.md` DECISION-006). A pre-existing (not
+task-10-introduced) CRLF/gofmt working-tree issue on 3 files, previously
+flagged in task 10's `TASK.md`
 10.6, has since been fixed on the `task-10-packaging` branch.
 
 **Deliberately deferred out of task 10, and not yet scoped as a future
