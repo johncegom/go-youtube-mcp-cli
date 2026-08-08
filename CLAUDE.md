@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Go port of [`johncegom/youtube-mcp-cli`](https://github.com/johncegom/youtube-mcp-cli) (a TypeScript project): a YouTube transcript/metadata/download tool exposed both as an MCP stdio server and a standalone CLI, with no YouTube API key — metadata comes from scraping the watch-page HTML and transcripts/downloads come from shelling out to `yt-dlp`. Phase 1 (in progress) is a faithful port of the existing TS functionality; no new features beyond what the TS version has are in scope yet.
 
-**Before doing any work here, read `docs/PLAN.md` (the full design/porting plan), `docs/LEDGER.md` (a lightweight index — current status + a table linking to each task's full detail under `docs/tasks/<slug>/TASK.md`), `docs/BUGS.md` (tracked bugs — including inherited-from-upstream ones — pending a decision), and `docs/DECISIONS.md` (deliberate design/scope tradeoffs made along the way) — the ledger index is the source of truth for progress, not this file. Read `docs/LEDGER.md` first, then open only the specific `docs/tasks/*/TASK.md` file(s) you actually need — this split exists specifically to avoid loading every finished task's history into context.**
+**Before doing any work here, read `docs/PLAN.md` (the full design/porting plan), `docs/LEDGER.md` (a lightweight index — current status + a table linking to each task's full detail under `docs/tasks/<slug>/TASK.md`), `docs/BUGS.md` (tracked bugs — including inherited-from-upstream ones — pending a decision), `docs/DECISIONS.md` (deliberate design/scope tradeoffs made along the way), and `docs/RETRO.md` (continuous-improvement retrospectives — process/product-quality lessons, not bugs or decisions) — the ledger index is the source of truth for progress, not this file. Read `docs/LEDGER.md` first, then open only the specific `docs/tasks/*/TASK.md` file(s) you actually need — this split exists specifically to avoid loading every finished task's history into context.**
 
 ### Task approval: Definition of Done + Test Plan (anti-drift control)
 
@@ -28,9 +28,55 @@ notice something out of scope while working, either ask first or log it
 separately (as its own decision/task), rather than folding it into the
 current task's diff unannounced.
 
+### Long-running tasks: track progress as sub-tasks in TASK.md
+
+If a task's Definition of Done has multiple independently-verifiable parts
+(e.g. several files to write, several smoke tests to run), break it into
+numbered sub-tasks (`10.1`, `10.2`, `10.2a`, ...) directly in that task's
+`TASK.md` Definition of Done, and check them off (`[x]` done, `[~]`
+partial/blocked, `[ ]` not started) as you go — don't wait until the whole
+task is finished to write anything down. This matters most when a single
+sub-task turns out to be slow or gets stuck (a slow first-time tool
+download, a flaky smoke test, waiting on external verification): record
+which sub-tasks are actually done and exactly which one is still open and
+why, rather than re-deriving the whole task's state from scratch or
+burning further effort re-verifying already-confirmed parts, if the session
+is interrupted, compacted, or handed off. See
+`docs/tasks/10-packaging/TASK.md` for the pattern (`10.1a`/`10.3c` marked
+`[~]` with a specific resume note each, while the rest of that task's
+sub-tasks are `[x]`).
+
 ### Bug tracking
 
 When a bug is found (including latent bugs inherited from the upstream TS project that a faithful port reproduces), it goes into `docs/BUGS.md`, not a silent fix. Add an entry with symptom and root cause (or say explicitly that root cause is unknown), propose options if there's an obvious fix, and **wait for a human decision before applying it** — the same pause-and-ask discipline that applies to `docs/LEDGER.md`'s numbered tasks applies to bugs.
+
+### Continuous improvement retrospective
+
+This is about the **way of working** — process, tooling, collaboration
+between the human and the assistant — not the product's feature set;
+product-scope ideas still go through the normal task-approval process
+above, not this log.
+
+**Bar for logging (generalization test):** log an entry only if the lesson
+would change how a *different, future* task gets approached. If it's just
+"here's what happened in this task," that belongs in that task's own
+`TASK.md` "Notes / deviations" section, not here — `docs/RETRO.md` is for
+patterns that outlive a single task, not a per-task narrative duplicating
+what `TASK.md` already records.
+
+When an entry clears that bar, answer three questions in `docs/RETRO.md`:
+**what went well** (a process/tooling/collaboration pattern worth
+deliberately repeating), **what could be improved about how the work got
+done** (a concrete friction point — a slow tool choice, a missing check, an
+ambiguous instruction — not "polish the product more"), and **advice for
+next time** (one or two actionable takeaways). This is distinct from
+`docs/BUGS.md` (something in the *product* is wrong) and `docs/DECISIONS.md`
+(a deliberate product/design tradeoff was *made*).
+
+**Before starting a new task**, skim `docs/RETRO.md` for outstanding advice
+relevant to what you're about to do — an entry that's written once and
+never rereads is not continuous improvement, it's a journal. See
+`docs/RETRO.md` RETRO-001 for the pattern.
 
 ### Decision log
 

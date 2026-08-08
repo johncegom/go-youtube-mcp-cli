@@ -3,3 +3,4 @@
 *.test
 *.out
 /.claude/
+/dist/

@@ -88,3 +88,78 @@ Each entry: context, decision, alternatives considered, consequences.
 - **Decision:** add `.gitattributes` with `* text=auto eol=lf`. An explicit `eol` attribute in `.gitattributes` takes precedence over `core.autocrlf` for any path it covers, so this fixes the problem without touching git config at all (respecting the project's "never update git config" rule) — verified directly: rewrote a tracked file via the same tool that caused the churn all session, `git status` stayed clean afterward.
 - **Alternatives considered:** setting `core.autocrlf=false` locally/globally (works, but requires a git config change, and only fixes it on machines where that config is set — `.gitattributes` fixes it for anyone who clones the repo, regardless of their local config); doing nothing and periodically running `git add` to refresh the index (works as a one-off per BUG-triage in this session, but doesn't address the root cause and recurs indefinitely).
 - **Consequences:** `git add --renormalize .` was run once to apply the new rule to all currently-tracked files — it found nothing to change (every tracked blob was already pure LF), so this was a purely additive fix with zero content rewrite.
+
+## DECISION-009: Debian-slim (not scratch/Alpine) for the Docker runtime image
+
+- **Where:** `Dockerfile`, second (`FROM debian:bookworm-slim`) stage
+- **Context:** task 10 (packaging) needed a container image running
+  `youtube-mcp`/`youtube-cli`. The obvious minimal-image choices for a
+  statically-built Go binary are `scratch` (no OS at all) or an Alpine base
+  (musl libc, ~5MB). Neither works cleanly here: `internal/core/ytdlp.go`'s
+  `EnsureYtDlp` downloads and executes a real, separately-built `yt-dlp`/
+  `ffmpeg` binary *at container runtime*, not at image-build time — that
+  binary needs a working libc and TLS root certificates to run and to
+  download itself in the first place, neither of which `scratch` provides,
+  and Alpine's musl libc has a real history of subtle incompatibilities
+  with binaries built expecting glibc (the downloaded `yt-dlp`/`ffmpeg`
+  releases target glibc).
+- **Decision:** use `debian:bookworm-slim` for the final stage, with
+  `ca-certificates` explicitly installed.
+- **Alternatives considered:** `scratch` (smallest, but breaks the lazy
+  install entirely — no shell, no libc, no CA bundle); Alpine (smaller
+  than Debian-slim, but risks glibc/musl binary-compatibility failures in
+  the very dependency this task exists to package cleanly).
+- **Consequences:** a noticeably larger image than `scratch`/Alpine would
+  produce, in exchange for the runtime `yt-dlp`/`ffmpeg` auto-install path
+  (the project's core value proposition, per DECISION-001) actually working
+  inside the container instead of failing on first real tool call.
+
+## DECISION-010: one combined Docker image for both binaries, not two
+
+- **Where:** `Dockerfile`
+- **Context:** the project produces two independent binaries
+  (`youtube-cli`, `youtube-mcp`) that share 100% of their dependencies and
+  build environment.
+- **Decision:** build both into a single image (`CMD ["youtube-mcp"]` as
+  the default, `youtube-cli` also on `PATH` and reachable by overriding the
+  command), rather than publishing two separate images.
+- **Alternatives considered:** two images (`youtube-mcp-cli-server`,
+  `youtube-mcp-cli-tool`) built from the same Dockerfile via build args/
+  targets — doubles the number of images to build, tag, and (eventually)
+  publish for two binaries that are a few MB each and share every layer
+  anyway; not worth it at this scale.
+- **Consequences:** anyone using the CLI via Docker must remember to
+  override the default command (`docker run --rm youtube-mcp-cli
+  youtube-cli ...`) rather than getting CLI behavior for free — documented
+  explicitly in `README.md`.
+
+## DECISION-011: HTTP/SSE MCP transport (hosted, multi-client) explicitly deferred out of task 10
+
+- **Where:** `cmd/youtube-mcp/main.go` (unchanged — still hardcodes
+  `&mcp.StdioTransport{}`); `docs/tasks/10-packaging/TASK.md`
+- **Context:** task 10 was scoped via an explicit `AskUserQuestion` to the
+  human, offering (a) add an unauthenticated `--transport=http` flag now,
+  (b) add it with basic token auth, or (c) defer entirely. The human chose
+  to defer. The MCP SDK already in `go.mod`
+  (`github.com/modelcontextprotocol/go-sdk v1.7.0`) ships
+  `mcp.NewStreamableHTTPHandler`/`mcp.NewSSEHandler`, so the library
+  capability already exists — the gap is design, not tooling.
+- **Decision:** ship task 10 with the MCP server still stdio-only.
+  "Runnable ... as a hosted server" is satisfied only in the sense of
+  "a container someone can run wherever they run containers, spawned
+  locally by its MCP client via `docker run -i`" — not a server multiple
+  remote clients connect to concurrently over a network.
+- **Alternatives considered:** adding the HTTP transport now, since the
+  SDK support already exists. Rejected because several real design
+  questions have no answer yet: `internal/core/paths.go`'s
+  `ResolveOutputDir`/downloads directory and `LogDownloadError` both assume
+  a single local filesystem for a single user — under concurrent remote
+  clients there is no per-session isolation, so two callers' downloads (or
+  error logs) could collide; there is also no authentication story at all,
+  meaning shipping the flag today would make it trivial to accidentally
+  expose an open, unauthenticated file-writing service to a network.
+- **Consequences:** genuinely remote/multi-client MCP access is not
+  possible yet. This is tracked as an open (not yet scoped) future item in
+  `docs/LEDGER.md`'s "Current status" rather than a task; scoping it
+  properly means answering the isolation/auth questions above first, not
+  just flipping on the SDK's existing HTTP handler.
