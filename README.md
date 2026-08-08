@@ -1,48 +1,51 @@
 # go-youtube-mcp-cli
 
-A Go port of [`umbertotancorre/youtube-mcp-cli`](https://github.com/umbertotancorre/youtube-mcp-cli):
-YouTube transcript/metadata/download tooling exposed both as an MCP stdio
-server and a standalone CLI, with no YouTube API key — metadata comes from
-scraping the watch-page HTML, transcripts/downloads come from shelling out
-to `yt-dlp` (auto-installed on first use, see `internal/core/ytdlp.go`).
+This is a Go version of [`umbertotancorre/youtube-mcp-cli`](https://github.com/umbertotancorre/youtube-mcp-cli).
+It gets YouTube transcripts, metadata, and downloads. You do not need a
+YouTube API key. It reads the video page HTML to get metadata. It uses
+`yt-dlp` to get transcripts and downloads (see `internal/core/ytdlp.go`).
+The tool installs `yt-dlp` automatically the first time you need it.
 
-See `docs/PLAN.md`, `docs/LEDGER.md`, `docs/BUGS.md`, and
-`docs/DECISIONS.md` for the full design/porting history.
+You can use this tool two ways:
 
-> **This repository is private.** All three install methods below require
-> an account with read access to this repo (i.e. an invited collaborator) —
-> none of this is public distribution.
+- As a command-line tool (CLI).
+- As an MCP server. An MCP server lets AI assistants like Claude use this
+  tool directly.
+
+For more details on the design, read `docs/PLAN.md`, `docs/LEDGER.md`,
+`docs/BUGS.md`, and `docs/DECISIONS.md`.
+
+> **This repository is private.** All install methods below need an
+> account with read access to this repo. This is not a public release.
 
 ## Install
 
 ### Option 1: download a release binary
 
-Grab the archive for your platform from this repo's
-[Releases](../../releases) page (requires private-repo access), extract it,
-and put `youtube-cli` / `youtube-mcp` on your `PATH`.
+Go to this repo's [Releases](../../releases) page. Download the file for
+your system. Unzip it. Put `youtube-cli` and `youtube-mcp` on your `PATH`.
 
 ### Option 2: `go install`
 
-Requires the Go toolchain and git access to this private repo (e.g. via SSH
-key or a configured `GOPRIVATE`/credential helper):
+You need the Go toolchain. You also need git access to this private repo
+(for example, an SSH key or a `GOPRIVATE` setting):
 
 ```sh
 go install github.com/johncegom/go-youtube-mcp-cli/cmd/youtube-cli@latest
 go install github.com/johncegom/go-youtube-mcp-cli/cmd/youtube-mcp@latest
 ```
 
-Or a specific tagged version instead of `@latest`.
+You can also install a specific version instead of `@latest`.
 
 ### Option 3: Docker
 
-Build the image locally (requires cloning this repo):
+First, clone this repo. Then build the image:
 
 ```sh
 docker build -t youtube-mcp-cli .
 ```
 
-The image is not published to any registry — build it yourself from a
-checkout.
+This repo does not publish the image anywhere. You must build it yourself.
 
 ### Option 4: run from source
 
@@ -61,17 +64,25 @@ youtube-cli metadata https://youtube.com/watch?v=dQw4w9WgXcQ --json
 youtube-cli download dQw4w9WgXcQ --audio --format mp3
 ```
 
-Run `youtube-cli --help` or `youtube-cli <command> --help` for full flag
-details. Via Docker: `docker run --rm youtube-mcp-cli youtube-cli --help`
-(the image's default command is `youtube-mcp`, so `youtube-cli` must be
-named explicitly).
+For all options, run `youtube-cli --help`. For help on one command, run
+`youtube-cli <command> --help`.
+
+With Docker, run:
+
+```sh
+docker run --rm youtube-mcp-cli youtube-cli --help
+```
+
+The Docker image runs `youtube-mcp` by default. You must name `youtube-cli`
+to use it instead.
 
 ## MCP server usage
 
-The MCP server (`youtube-mcp`) speaks MCP over stdio — it's meant to be
-spawned by an MCP client (e.g. Claude Desktop), not run interactively.
+The MCP server (`youtube-mcp`) talks to its client over stdio (standard
+input and output). An MCP client, such as Claude Desktop, starts this
+server itself. You do not run it by hand.
 
-**From source**, in `claude_desktop_config.json`:
+**From source**, add this to `claude_desktop_config.json`:
 
 ```json
 {
@@ -84,13 +95,13 @@ spawned by an MCP client (e.g. Claude Desktop), not run interactively.
 }
 ```
 
-(`go -C <dir> run ...` resolves `go.mod` relative to `<dir>`, so this works
-regardless of the client's own working directory. On Windows, use an
-absolute path to `go.exe` itself — GUI-launched processes don't reliably
-inherit a shell's `PATH`.)
+The `-C <dir>` flag tells `go` to run from that folder. This works no
+matter where the client starts the process from. On Windows, use the full
+path to `go.exe`. Apps with a graphical interface do not always see your
+shell's `PATH`.
 
-**Via Docker** (no Go toolchain or source checkout needed on the machine
-running Claude Desktop, only Docker + the already-built image):
+**With Docker**, you do not need Go or a source checkout on the machine
+that runs Claude Desktop. You only need Docker and the built image:
 
 ```json
 {
@@ -103,22 +114,49 @@ running Claude Desktop, only Docker + the already-built image):
 }
 ```
 
-**Via an installed/downloaded binary**, point `command` directly at the
-`youtube-mcp` binary's path with no `args`.
+**With an installed or downloaded binary** (the simplest option — no Go,
+no Docker, and no source checkout needed at all), set `command` to the
+full path of the `youtube-mcp` file. Leave `args` empty:
 
-Claude Desktop must be fully quit and relaunched (not just the window
-closed) to pick up any config change.
+```json
+{
+  "mcpServers": {
+    "youtube": {
+      "command": "/absolute/path/to/youtube-mcp"
+    }
+  }
+}
+```
 
-### Scope note: local only, not a hosted/remote server
+On Windows, use a full path with forward slashes and the `.exe` ending,
+for example `"C:/Users/you/bin/youtube-mcp.exe"`. If you used
+`go install`, the binary is in your Go bin folder — run `go env GOPATH`
+and look inside `bin` there, or run `go env GOBIN` if you set that
+instead.
 
-`youtube-mcp` only implements the stdio transport — it is always spawned
-as a local subprocess of its MCP client, never listens on a network port.
-Nothing here supports running it as a shared/remote server that multiple
-clients connect to over HTTP: the tool's design (per-machine `yt-dlp`
-cache, download directory allowlisted to the local home/temp dirs, a
-single local error log) assumes one local user, and serving multiple
-remote clients would need real answers for shared download-directory
-collisions, per-session isolation, and authentication that don't exist
-yet. The underlying MCP SDK (`github.com/modelcontextprotocol/go-sdk`)
-does support HTTP-based transports for a future task that scopes those
-questions properly — see `docs/LEDGER.md`.
+After you change the config, you must fully quit Claude Desktop and open
+it again. Closing the window is not enough.
+
+**Tip:** if you have a coding agent with file access (for example, Claude
+Code), you can ask it to make this change for you. Tell it the path to
+`youtube-mcp` on your computer, and ask it to add an entry to your
+`claude_desktop_config.json` file, using the JSON example above. Ask it to
+add the entry, not replace the whole file — you may already have other
+MCP servers set up, and you do not want to lose them.
+
+### This server runs locally only
+
+`youtube-mcp` only supports stdio. It always runs as a local process
+started by its client. It never opens a network port. This repo does not
+support running it as a shared server that many remote clients connect to
+over HTTP.
+
+Here is why: the tool assumes one user on one machine. It uses one shared
+cache for `yt-dlp`, one shared downloads folder, and one shared error log.
+To serve many remote users safely, the tool would need separate storage
+per user and a way to check who is allowed to connect. Neither exists yet.
+
+The MCP SDK this project uses
+(`github.com/modelcontextprotocol/go-sdk`) does support HTTP-based
+servers. A future task could add that support once these open questions
+are answered. See `docs/LEDGER.md` for details.
