@@ -99,7 +99,7 @@ go test ./internal/core/... -run TestParseVtt -v   # run a single test by name
 gofmt -w <files>                        # format — run before every commit/verification pass
 ```
 
-There is no Makefile or linter config in this repo — `go build`, `go vet`, `go test`, and `gofmt` are the whole local toolchain. CI (`.github/workflows/ci.yml`) runs the same four checks on GitHub Actions for every push/PR to `main` (Ubuntu + Windows matrix for build/vet/test, Ubuntu-only for gofmt — see `docs/tasks/ci-cd/TASK.md`); branch protection isn't enabled (private repo, free tier — see `docs/DECISIONS.md` DECISION-007), so CI reports status but doesn't block a merge yet.
+There is no Makefile or linter config in this repo — `go build`, `go vet`, `go test`, and `gofmt` are the whole local toolchain. CI (`.github/workflows/ci.yml`) runs the same four checks on GitHub Actions for every push/PR to `main` (Ubuntu + Windows matrix for build/vet/test, Ubuntu-only for gofmt — see `docs/tasks/ci-cd/TASK.md`); branch protection on `main` requires all of those checks to pass before merge (see `docs/DECISIONS.md` DECISION-007 and DECISION-012 — it was blocked while the repo was private on the free tier, and enabled once the repo went public).
 
 Two binaries live under `cmd/`, both built and working: `cmd/youtube-cli` (CLI — `go run ./cmd/youtube-cli <args>`) and `cmd/youtube-mcp` (MCP stdio server — `go run ./cmd/youtube-mcp`).
 

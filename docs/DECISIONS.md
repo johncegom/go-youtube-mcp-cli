@@ -75,6 +75,10 @@ Each entry: context, decision, alternatives considered, consequences.
 
 ## DECISION-007: CI runs and reports status, but branch protection is not enabled — repo stays private
 
+**Superseded by DECISION-012** — the repo went public and branch
+protection is now enabled. Kept below for the historical record of why it
+was blocked in the first place.
+
 - **Where:** `.github/workflows/ci.yml`; GitHub repo settings (not a file in this repo)
 - **Context:** the CI/CD plan (`docs/tasks/ci-cd/TASK.md`) called for branch protection on `main` requiring the CI checks to pass before merge, so a red run actually *blocks* bad code, not just reports it. GitHub's API rejected this (`403: Upgrade to GitHub Pro or make this repository public to enable this feature`) — branch protection on a private repo requires a paid plan on the free tier.
 - **Decision:** keep the repo private and skip branch protection for now. CI still runs and reports pass/fail on every push and PR (a real, visible signal), it just can't technically prevent a merge.
@@ -163,3 +167,42 @@ Each entry: context, decision, alternatives considered, consequences.
   `docs/LEDGER.md`'s "Current status" rather than a task; scoping it
   properly means answering the isolation/auth questions above first, not
   just flipping on the SDK's existing HTTP handler.
+
+## DECISION-012: repo made public and licensed MIT, superseding DECISION-007
+
+- **Where:** GitHub repo visibility (`johncegom/go-youtube-mcp-cli`);
+  `LICENSE` (new file); `README.md` (private-repo language removed)
+- **Context:** the project is a Go port of `umbertotancorre/youtube-mcp-cli`,
+  which is itself MIT-licensed (confirmed via the GitHub API, not assumed).
+  Before this decision, the repo was private with no `LICENSE` file
+  (DECISION-007), which also meant branch protection on `main` was blocked
+  by GitHub's free-tier restriction (private repos need a paid plan for
+  branch protection).
+- **Decision:** made the repo public and added a root `LICENSE` (MIT,
+  copyright Minh Duong). The copyright line names the port's own author,
+  not Umberto Tancorre — verified first that no verbatim upstream
+  TypeScript source was ever copied into this repo (ground-truth test
+  fixtures were derived by *running* the TS code externally and recording
+  its output, e.g. `internal/core/transcript_test.go:9-12`, not by copying
+  its source text), so this Go codebase is an independent implementation,
+  not a derivative work requiring upstream's copyright notice. Upstream is
+  still credited by name in `README.md`. Branch protection on `main` was
+  enabled at the same time, now that going public unblocked it for free —
+  closing the gap DECISION-007 left open.
+- **Alternatives considered:** staying private indefinitely (keeps the
+  status quo but leaves DECISION-007's branch-protection gap permanently
+  unresolved on the free tier); upgrading to GitHub Pro instead of going
+  public (also unblocks branch protection while staying private, but is a
+  real billing action, and doesn't serve any purpose for a project already
+  built as an open-source port of an open-source project).
+- **Consequences:** before flipping visibility, tracked files were checked
+  for secrets, tokens, and personal machine paths — none found (the only
+  match for common secret-pattern searches was the legitimate
+  `${{ secrets.GITHUB_TOKEN }}` reference in `release.yml`). Git history
+  was not exhaustively scanned commit-by-commit beyond that; the repo is
+  small (21 commits at the time of this decision) and entirely
+  project-authored, so residual risk was judged low, but a full
+  history/secret scan (e.g. `gitleaks`) remains a reasonable one-time
+  follow-up if ever in doubt. Exposure from going public is not fully
+  reversible — anything already cloned or cached during the public window
+  stays out even if visibility is later reverted.
