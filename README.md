@@ -15,8 +15,7 @@ You can use this tool two ways:
 For more details on the design, read `docs/PLAN.md`, `docs/LEDGER.md`,
 `docs/BUGS.md`, and `docs/DECISIONS.md`.
 
-> **This repository is private.** All install methods below need an
-> account with read access to this repo. This is not a public release.
+This project is open source, under the [MIT License](LICENSE).
 
 ## Install
 
@@ -27,8 +26,7 @@ your system. Unzip it. Put `youtube-cli` and `youtube-mcp` on your `PATH`.
 
 ### Option 2: `go install`
 
-You need the Go toolchain. You also need git access to this private repo
-(for example, an SSH key or a `GOPRIVATE` setting):
+You need the Go toolchain:
 
 ```sh
 go install github.com/johncegom/go-youtube-mcp-cli/cmd/youtube-cli@latest
