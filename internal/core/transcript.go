@@ -2,7 +2,9 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -132,16 +134,44 @@ func formatSearchResult(videoID, query string, matches []transcriptSegment) stri
 }
 
 // TranscriptErrorText turns a raw fetch error into a user-facing message,
-// classifying by substring the same way the upstream TS implementation
-// does (timeout / missing captions / network error / generic).
+// classifying (timeout / missing captions / network error / generic).
+//
+// The network-error case has two distinct sources reachable from this
+// function's callers (see docs/BUGS.md BUG-003), each classified
+// differently because only one preserves a real Go error chain:
+//   - EnsureYtDlp's own network failure (internal/core/ytdlp.go) is
+//     %w-wrapped down to go-ytdlp's HTTP client error, which is ultimately
+//     a *net.DNSError/*net.OpError — both satisfy net.Error, so it's
+//     classified by type, correct regardless of OS-specific error text.
+//   - yt-dlp's own process failure (fetchSegments below) only survives as
+//     a flattened string ("yt-dlp failed: <stderr>"), so it's classified
+//     by matching yt-dlp's own real, OS-independent wrapper phrasing.
+//     yt-dlp uses different wrapper phrasing depending on which stage of
+//     its pipeline hits the network failure, so two real phrasings are
+//     matched, both captured directly from real yt-dlp runs (not guessed):
+//   - "Unable to download webpage" — captured by running yt-dlp directly
+//     against a URL on the RFC 2606 reserved ".invalid" TLD (guaranteed
+//     non-resolving, no real internet access needed):
+//     ERROR: [generic] Unable to download webpage: HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed) ...
+//   - "Unable to download API page" — captured by running the CLI against
+//     a real YouTube URL with HTTPS_PROXY/HTTP_PROXY pointed at an
+//     unreachable local port (deterministic connection-refused, no DNS
+//     dependency), which fails at YouTube's API-page fetch stage instead:
+//     ERROR: [youtube] <id>: Unable to download API page: ('Unable to connect to proxy', NewConnectionError(...)) (caused by ProxyError(...))
+//     The previous "ENOTFOUND"/"ECONNREFUSED" substrings (Node.js/libuv
+//     error codes ported from the upstream TS project) never matched any
+//     real source and have been removed.
 func TranscriptErrorText(videoID string, err error) string {
 	message := err.Error()
+	var netErr net.Error
 	switch {
 	case strings.Contains(message, "timed out"):
 		return fmt.Sprintf("Transcript fetch timed out for video %s. Please try again.", videoID)
 	case strings.Contains(message, "No transcript available") || strings.Contains(message, "captions"):
 		return fmt.Sprintf("No transcript available for video %s. The video may not have captions.", videoID)
-	case strings.Contains(message, "ENOTFOUND") || strings.Contains(message, "ECONNREFUSED"):
+	case errors.As(err, &netErr):
+		return fmt.Sprintf("Network error while fetching transcript for video %s. Please check your internet connection.", videoID)
+	case strings.Contains(message, "Unable to download webpage") || strings.Contains(message, "Unable to download API page"):
 		return fmt.Sprintf("Network error while fetching transcript for video %s. Please check your internet connection.", videoID)
 	default:
 		return fmt.Sprintf("Failed to fetch transcript for video %s: %s", videoID, message)

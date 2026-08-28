@@ -2,6 +2,8 @@ package core
 
 import (
 	"errors"
+	"fmt"
+	"net"
 	"reflect"
 	"testing"
 )
@@ -181,7 +183,44 @@ func TestPickVttFile(t *testing.T) {
 	}
 }
 
+// dialRefused returns a real *net.OpError (satisfying net.Error) by
+// binding a loopback listener, closing it immediately, then dialing the
+// now-closed address — deterministic, offline-safe, and identical on
+// Windows/Linux CI, unlike hand-written OS-specific errno text.
+func dialRefused(t *testing.T) error {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("dialRefused: listen: %v", err)
+	}
+	addr := l.Addr().String()
+	if err := l.Close(); err != nil {
+		t.Fatalf("dialRefused: close: %v", err)
+	}
+	_, dialErr := net.Dial("tcp", addr)
+	if dialErr == nil {
+		t.Fatal("dialRefused: expected dial to a closed port to fail")
+	}
+	return dialErr
+}
+
+// The "network error" cases' ground truth comes from three real, distinct
+// sources (see docs/BUGS.md BUG-003 and TranscriptErrorText's doc
+// comment): a genuine Go net.Error (dialRefused, above — a real dial to a
+// just-closed loopback listener) for EnsureYtDlp's own failure path, and
+// two literal captured yt-dlp stderr lines for yt-dlp's own process-failure
+// path — one from running yt-dlp directly against a URL on the RFC 2606
+// reserved ".invalid" TLD, and one from running the CLI against a real
+// YouTube URL with HTTPS_PROXY/HTTP_PROXY pointed at an unreachable local
+// port (yt-dlp fails at a different pipeline stage — YouTube's API-page
+// fetch — with different wrapper phrasing). None of these three is
+// hand-reasoned or ported from the upstream TS project's Node.js error
+// vocabulary.
 func TestTranscriptErrorText(t *testing.T) {
+	const wantNetworkMsg = `Network error while fetching transcript for video abc123. Please check your internet connection.`
+	const capturedYtDlpStderr = `ERROR: [generic] Unable to download webpage: HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed) (caused by TransportError("HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed)"))`
+	const capturedYtDlpProxyStderr = `ERROR: [youtube] dQw4w9WgXcQ: Unable to download API page: ('Unable to connect to proxy', NewConnectionError("HTTPSConnection(host='127.0.0.1', port=1): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it")) (caused by ProxyError('(\'Unable to connect to proxy\', NewConnectionError("HTTPSConnection(host=\'127.0.0.1\', port=1): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"))'))`
+
 	cases := []struct {
 		name string
 		err  error
@@ -190,8 +229,10 @@ func TestTranscriptErrorText(t *testing.T) {
 		{"timed out", errors.New("Transcript fetch timed out"), `Transcript fetch timed out for video abc123. Please try again.`},
 		{"no transcript", errors.New("No transcript available"), `No transcript available for video abc123. The video may not have captions.`},
 		{"captions", errors.New("the video may not have captions"), `No transcript available for video abc123. The video may not have captions.`},
-		{"dns error", errors.New("dial tcp: lookup youtube.com: ENOTFOUND"), `Network error while fetching transcript for video abc123. Please check your internet connection.`},
-		{"conn refused", errors.New("dial tcp: ECONNREFUSED"), `Network error while fetching transcript for video abc123. Please check your internet connection.`},
+		{"real net.Error (dial refused)", dialRefused(t), wantNetworkMsg},
+		{"real net.Error, wrapped like EnsureYtDlp", fmt.Errorf("yt-dlp binary not found and auto-install failed: %w", dialRefused(t)), wantNetworkMsg},
+		{"captured yt-dlp network stderr (generic webpage fetch)", errors.New(capturedYtDlpStderr), wantNetworkMsg},
+		{"captured yt-dlp network stderr (API page fetch via proxy)", errors.New(capturedYtDlpProxyStderr), wantNetworkMsg},
 		{"other", errors.New("boom"), `Failed to fetch transcript for video abc123: boom`},
 	}
 	for _, tc := range cases {
@@ -201,4 +242,20 @@ func TestTranscriptErrorText(t *testing.T) {
 			}
 		})
 	}
+}
+
+// FuzzTranscriptErrorText checks that TranscriptErrorText never panics on
+// arbitrary error text, including text shaped like the two real
+// network-error sources it now classifies.
+func FuzzTranscriptErrorText(f *testing.F) {
+	f.Add("")
+	f.Add("Transcript fetch timed out")
+	f.Add(`ERROR: [generic] Unable to download webpage: HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed)`)
+	f.Add(`ERROR: [youtube] dQw4w9WgXcQ: Unable to download API page: ('Unable to connect to proxy', NewConnectionError(...))`)
+	f.Add("dial tcp: lookup youtube.com: ENOTFOUND")
+	f.Add("boom")
+
+	f.Fuzz(func(t *testing.T, message string) {
+		_ = TranscriptErrorText("abc123", errors.New(message)) // must not panic
+	})
 }
