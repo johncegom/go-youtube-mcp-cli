@@ -95,3 +95,28 @@ Fix now (human decision, this session), plus "kindly suggest the user pre-instal
 3. **`requireFFmpeg(ffmpegPath)`** (`internal/core/ytdlp.go`, unit-tested): audio downloads (`StartAudioDownload`/`DownloadAudioBlocking`) now fail fast with a clear, actionable message when ffmpeg truly isn't available, instead of a confusing deep yt-dlp postprocessing error. Video downloads print a clear upfront warning (not a hard failure) when ffmpeg is unavailable, since merging is graceful-degradable (matches upstream's "ffmpeg optional" intent) but the degraded output should no longer be a surprise.
 4. **Friendly manual-install suggestion**, per explicit request: printed once, before the download starts (`"ffmpeg not found locally; downloading now (one-time, ~170MB, can take a while on slower connections). For faster/more reliable startup, consider installing ffmpeg yourself and ensuring it's on PATH."`), and repeated in both the final failure warning and `requireFFmpeg`'s error message.
 5. **Verified end-to-end** against `dQw4w9WgXcQ` after clearing the ffmpeg cache: `download --audio --format mp3` now actually runs `[ExtractAudio]` and produces a real, correctly-sized `.mp3` (previously: hard failure); `download --quality sd360` now runs `[Merger] Merging formats into "...mp4"` and produces one playable `.mp4` (previously: silently left two unmerged files on disk).
+
+---
+
+## BUG-003: `TranscriptErrorText`'s network-error branch is dead code in Go (ported Node.js error strings)
+
+- **Status:** open
+- **Discovered:** critical code review of the MCP server surface (2026-08-28, the evaluation session that scoped Phase 2), by reading `internal/core/transcript.go` — not triggered by a runtime failure.
+- **Inherited from upstream:** yes, in the sense that the substrings were ported verbatim from the TS implementation, where they are *correct* — `ENOTFOUND`/`ECONNREFUSED` are Node.js `libuv` error codes that really do appear in Node error messages. The port carried the strings across a runtime boundary where they can never occur.
+
+### Symptom
+
+Network failures during transcript fetch (DNS resolution failure, connection refused) are reported to the user/agent via the generic branch — `"Failed to fetch transcript for video <id>: <raw error>"` — instead of the intended friendly message `"Network error while fetching transcript for video <id>. Please check your internet connection."` No crash, no wrong data; the classification is just unreachable.
+
+### Root cause
+
+`TranscriptErrorText` (`internal/core/transcript.go:144`) classifies by substring match on `"ENOTFOUND"` and `"ECONNREFUSED"`. Go's `net` errors render as e.g. `"dial tcp: lookup example.com: no such host"` or `"connect: connection refused"` — they never contain the Node.js error-code strings, so that `case` can never be true in this codebase. (In practice the error text reaching this function usually comes from yt-dlp's stderr anyway, which has its own phrasing — any fix should classify against *actually observed* Go/yt-dlp error text, derived per the TDD ground-truth rule, not hand-reasoned substrings.)
+
+### Options
+
+- **Fix:** replace/augment the substrings with ones derived from real observed failures (e.g. capture yt-dlp stderr and Go `net` error text under a disconnected/blocked network, then match on those; or match Go error types upstream of the string conversion where possible). Small, self-contained; natural to fold into Phase 2 only if a task already touches this function, otherwise as its own out-of-band fix.
+- **Wontfix (faithful parity):** the generic branch's message still contains the raw error, so the information isn't lost — only the friendly classification is. Leave as a documented quirk.
+
+### Decision
+
+Pending — awaiting human decision, per the bug-tracking process above.

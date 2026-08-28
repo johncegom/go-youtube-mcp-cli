@@ -206,3 +206,33 @@ was blocked in the first place.
   follow-up if ever in doubt. Exposure from going public is not fully
   reversible — anything already cloned or cached during the public window
   stays out even if visibility is later reverted.
+
+## DECISION-013: Phase 2 scoped — the "faithful port only" constraint lifted for five approved tasks
+
+- **Where:** `docs/PLAN.md` ("Phase 2" section); `docs/LEDGER.md` tasks
+  11–15; `docs/tasks/{11-transcript-cache,12-download-jobs,13-context-search,14-chapters,15-playlist-search}/TASK.md`
+- **Context:** Phase 1's governing rule was "no new features beyond what
+  the TS version has." With Phase 1 complete, a critical evaluation of the
+  MCP tools from the perspective of their actual consumer (an LLM agent)
+  identified five structural weaknesses (no caching, unobservable
+  fire-and-forget downloads with a misleading tool description, whole-blob
+  transcript retrieval, naive per-segment search, single-video-only
+  scope) — all present upstream too, so a faithful port can't fix them.
+- **Decision:** human approved (2026-08-28) five Phase-2 tasks (11–15)
+  that deliberately go beyond upstream. Each got a full Definition of Done
+  + Test Plan reviewed *before* any implementation, per the standing
+  task-approval process. Ground truth for TDD shifts from "run the
+  upstream TS code" to real-world fixtures / published rules / the
+  reviewed spec itself, as documented in `docs/PLAN.md`'s "Phase 2
+  ground-truth note" — the rest of the TDD discipline is unchanged.
+- **Alternatives considered:** staying a pure mirror of upstream
+  indefinitely (keeps parity as the single invariant, but freezes in
+  upstream's agent-hostile weaknesses); contributing the fixes upstream to
+  the TS project instead (doesn't help this Go artifact's users, and the
+  two codebases have already deliberately diverged via BUG-001/002 fixes).
+- **Consequences:** this repo is no longer a faithful mirror of upstream's
+  feature surface — README/tool lists will diverge as tasks 11–15 land,
+  and per-task deviations (e.g. task 12's honest download descriptions,
+  task 13's changed search output format) each get their own DECISIONS
+  entry at implementation time. Only these five tasks are approved;
+  anything further still needs its own scoping pass.
