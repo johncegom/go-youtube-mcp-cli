@@ -40,6 +40,11 @@ this index) before pausing.
 | — | Out-of-band: CI/CD (GitHub Actions; branch protection enabled, see DECISION-012) | [x] done | [docs/tasks/ci-cd/TASK.md](tasks/ci-cd/TASK.md) |
 | 10 | Packaging: GoReleaser + GitHub Releases, `go install`, Docker image, README | [x] done | [docs/tasks/10-packaging/TASK.md](tasks/10-packaging/TASK.md) |
 | — | Out-of-band: repo made public, MIT-licensed, branch protection enabled | [x] done | see `docs/DECISIONS.md` DECISION-012 |
+| 11 | Phase 2: transcript cache + `get_transcript_range` | [ ] not started | [docs/tasks/11-transcript-cache/TASK.md](tasks/11-transcript-cache/TASK.md) |
+| 12 | Phase 2: download job tracking (`get_download_status`, `list_downloads`) | [ ] not started | [docs/tasks/12-download-jobs/TASK.md](tasks/12-download-jobs/TASK.md) |
+| 13 | Phase 2: context-aware transcript search | [ ] not started | [docs/tasks/13-context-search/TASK.md](tasks/13-context-search/TASK.md) |
+| 14 | Phase 2: chapters (`get_chapters`) | [ ] not started | [docs/tasks/14-chapters/TASK.md](tasks/14-chapters/TASK.md) |
+| 15 | Phase 2: playlist listing + cross-video search (depends on 11) | [ ] not started | [docs/tasks/15-playlist-search/TASK.md](tasks/15-playlist-search/TASK.md) |
 
 ## Current status
 
@@ -70,15 +75,23 @@ design questions — shared download directory, per-session isolation, auth
 there's a concrete need for remote (not just locally-spawned-via-Docker)
 MCP access.
 
-There is no task 11 yet. Any further work needs its own scoping pass
-(PLAN.md update or a new out-of-band entry with its own `TASK.md` +
-Definition of Done + Test Plan) before starting, per the project's
-standing process.
+**Phase 2 is scoped and approved (2026-08-28):** tasks 11–15, driven by a
+critical evaluation of the MCP tools from the LLM-agent-consumer
+perspective — see `docs/PLAN.md`'s "Phase 2" section for the rationale and
+`docs/DECISIONS.md` DECISION-013 for the scope-expansion decision. Each
+task has a reviewed Definition of Done + Test Plan in its own `TASK.md`.
+Implementation order is 11 → 12 → 13 → 14 → 15 (11 is the foundation the
+others lean on; 15 hard-depends on 11). None has been started. The
+pause-and-ask rule still applies between tasks. Related: BUG-003 (dead
+Node-ism branches in `TranscriptErrorText`) is open in `docs/BUGS.md`
+awaiting a decision.
 
 ## Resume checklist for next session
 
 1. Read this index first (not the individual task files, unless you need one).
 2. Run `go build ./... && go vet ./... && go test ./...` to confirm the current state still holds.
 3. Skim `docs/RETRO.md` for any still-relevant advice before starting new work.
-4. Tasks 1–10 are done — there's no pre-scoped next task. Check with the human for direction before starting new work; scope it (DoD + Test Plan, per `CLAUDE.md`) before writing code.
+4. Next task: **11** (transcript cache) — its DoD + Test Plan in
+   `docs/tasks/11-transcript-cache/TASK.md` are already approved, so
+   implementation can start after confirming with the human.
 5. After finishing a task: update **that task's `TASK.md`** with full detail first, then update this index's status column/checkbox for it, then pause and ask the human before starting the next task. If the task involved a deliberate design/scope tradeoff, log it in `docs/DECISIONS.md` too; if it surfaced a way-of-working lesson that generalizes beyond that one task, log it in `docs/RETRO.md`.

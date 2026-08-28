@@ -1,4 +1,4 @@
-# Port youtube-mcp-cli (TypeScript) to Go — Phase 1
+# Port youtube-mcp-cli (TypeScript) to Go — Phase 1 + Phase 2
 
 ## Context
 
@@ -104,3 +104,75 @@ No dependency is needed for YouTube API access — same as the original, everyth
 - **Build**: `go build ./...` for both binaries.
 - **CLI smoke test**: run `go run ./cmd/youtube-cli transcript dQw4w9WgXcQ --timestamps`, `... metadata dQw4w9WgXcQ --json`, `... download dQw4w9WgXcQ --audio` against a real public video, confirm output/format matches the TS CLI's behavior (this exercises the go-ytdlp auto-install path on a clean machine/cache too).
 - **MCP smoke test**: run `go run ./cmd/youtube-mcp` and drive it with an MCP client (e.g. the `mcp` CLI inspector, or Claude Code itself via a temporary `.mcp.json` entry) to call each of the 11 tools once, confirming the 3 alias tools return identical results to their canonical counterpart.
+
+---
+
+# Phase 2 — beyond the faithful port (approved 2026-08-28)
+
+Phase 1 (the faithful port) is complete — see `docs/LEDGER.md`. Phase 2
+deliberately goes **beyond** upstream's feature set, driven by a critical
+evaluation of the MCP tools from the perspective of their actual consumer
+(an LLM agent). The "no new features beyond the TS version" constraint that
+governed Phase 1 is hereby lifted for these five scoped tasks only (see
+`docs/DECISIONS.md` DECISION-013); anything further still needs its own
+scoping pass.
+
+The evaluation found five structural weaknesses:
+
+1. **No caching** — every transcript tool call re-runs yt-dlp for the same
+   video; a typical agent workflow (metadata → transcript → search) is
+   multi-call, so this multiplies latency and YouTube 429 exposure.
+2. **Fire-and-forget downloads are a black hole** — `StartVideoDownload`
+   returns a *predicted* path immediately; failures go to a log file no MCP
+   client reads, and the tool descriptions falsely say "Returns the file
+   path."
+3. **Token-cost blindness** — `get_transcript` returns a whole transcript
+   as one blob; no windowed/range retrieval for long videos.
+4. **Naive search** — per-segment substring matching means phrases spanning
+   two VTT segments never match, and matches come back with no surrounding
+   context.
+5. **Single-video only** — no playlist awareness; cross-video questions
+   ("which episode covers X?") are impossible.
+
+## Phase 2 tasks (implementation order = dependency order)
+
+Each task has its own `docs/tasks/<slug>/TASK.md` with a full Definition of
+Done + Test Plan, per the standing task-approval process. Summary:
+
+- **Task 11 — Transcript cache + windowed retrieval**
+  (`docs/tasks/11-transcript-cache/TASK.md`): in-memory TTL cache of parsed
+  segments keyed by `videoID+language`, transparently used by all existing
+  transcript tools; new `get_transcript_range` MCP tool for
+  timestamp-windowed retrieval. Fixes weaknesses 1 and 3. Foundation for
+  tasks 13 and 15.
+- **Task 12 — Download job tracking**
+  (`docs/tasks/12-download-jobs/TASK.md`): job registry for fire-and-forget
+  downloads; `download_video`/`download_audio` return a job ID; new
+  `get_download_status` and `list_downloads` MCP tools; honest tool
+  descriptions. Fixes weakness 2.
+- **Task 13 — Context-aware transcript search**
+  (`docs/tasks/13-context-search/TASK.md`): match against a merged text
+  stream so cross-segment phrases hit; return each match with a
+  configurable context window of surrounding segments; merge overlapping
+  windows. Upgrades `search_transcript` in place. Fixes weakness 4.
+- **Task 14 — Chapters** (`docs/tasks/14-chapters/TASK.md`): parse
+  YouTube chapters from the video description (already scraped); new
+  `get_chapters` MCP tool. Complements task 11's `get_transcript_range`
+  (chapters give the agent the timestamps to ask for).
+- **Task 15 — Playlist listing + cross-video search**
+  (`docs/tasks/15-playlist-search/TASK.md`): resolve playlist entries via
+  `yt-dlp --flat-playlist`; new `list_playlist` and `search_playlist` MCP
+  tools; per-video failures reported inline, never aborting the whole
+  search. Depends on task 11's cache. Fixes weakness 5.
+
+## Phase 2 ground-truth note
+
+Phase 1's TDD rule derived ground truth by running the upstream TS code.
+Phase 2 features have **no upstream equivalent**, so ground truth comes
+from: (a) real-world fixtures (e.g. actual YouTube video descriptions for
+chapter parsing, real VTT files for search fixtures), (b) published,
+verifiable rules (e.g. YouTube's own documented chapter requirements), and
+(c) the task's own reviewed specification (its Definition of Done) for
+behavior that is genuinely new — the same convention already used for
+`pickVttFile` in BUG-001's fix. The rest of the TDD discipline (test first,
+red before green, never bend a test to match the code) is unchanged.
