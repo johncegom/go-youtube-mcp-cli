@@ -83,8 +83,9 @@ task has a reviewed Definition of Done + Test Plan in its own `TASK.md`.
 Implementation order is 11 → 12 → 13 → 14 → 15 (11 is the foundation the
 others lean on; 15 hard-depends on 11). None has been started. The
 pause-and-ask rule still applies between tasks. Related: BUG-003 (dead
-Node-ism branches in `TranscriptErrorText`) is open in `docs/BUGS.md`
-awaiting a decision.
+Node-ism branches in `TranscriptErrorText`) is fixed — see `docs/BUGS.md`
+for the full writeup (branch `fix/bug-003-transcript-error-classification`,
+pending merge to `main`).
 
 ## Resume checklist for next session
 

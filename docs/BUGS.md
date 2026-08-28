@@ -100,7 +100,7 @@ Fix now (human decision, this session), plus "kindly suggest the user pre-instal
 
 ## BUG-003: `TranscriptErrorText`'s network-error branch is dead code in Go (ported Node.js error strings)
 
-- **Status:** open
+- **Status:** fixed (branch `fix/bug-003-transcript-error-classification`, pending merge to `main`)
 - **Discovered:** critical code review of the MCP server surface (2026-08-28, the evaluation session that scoped Phase 2), by reading `internal/core/transcript.go` — not triggered by a runtime failure.
 - **Inherited from upstream:** yes, in the sense that the substrings were ported verbatim from the TS implementation, where they are *correct* — `ENOTFOUND`/`ECONNREFUSED` are Node.js `libuv` error codes that really do appear in Node error messages. The port carried the strings across a runtime boundary where they can never occur.
 
@@ -119,4 +119,62 @@ Network failures during transcript fetch (DNS resolution failure, connection ref
 
 ### Decision
 
-Pending — awaiting human decision, per the bug-tracking process above.
+Fix now (human decision, 2026-08-28). Investigation found two distinct
+error sources reach `TranscriptErrorText`, only one of which preserves a
+real Go error chain — so the fix classifies each differently rather than
+using one substring match for both:
+
+1. **`EnsureYtDlp`'s own network failure** (`internal/core/ytdlp.go`) is
+   `%w`-wrapped down to `go-ytdlp`'s HTTP client error, which is
+   ultimately a `*net.DNSError`/`*net.OpError` — both satisfy `net.Error`.
+   `TranscriptErrorText` (`internal/core/transcript.go`) now classifies
+   this case with `errors.As(err, &netErr)` against `net.Error`, by type
+   rather than OS-specific text — correct identically on Windows and
+   Linux CI. Verified directly: binding a loopback listener, closing it,
+   then dialing the closed address produces a real `*net.OpError`
+   satisfying this check (deterministic, offline-safe, no network
+   dependency).
+2. **yt-dlp's own process/network failure** (`fetchSegments`) only
+   survives as a flattened string (`"yt-dlp failed: <stderr>"`), so no
+   type chain is available there. `TranscriptErrorText` matches yt-dlp's
+   own real, OS-independent wrapper phrasing. Manual end-to-end testing
+   (see step 5) found that yt-dlp uses *different* wrapper phrasing
+   depending on which pipeline stage hits the network failure, so two
+   real phrasings are matched, both captured directly (not guessed):
+   - `"Unable to download webpage"` — captured by running yt-dlp directly
+     (outside this Go code) against a URL on the RFC 2606 reserved
+     `.invalid` TLD, guaranteed non-resolving with no need to cut real
+     internet access:
+     ```
+     ERROR: [generic] Unable to download webpage: HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed) (caused by TransportError("HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed)"))
+     ```
+   - `"Unable to download API page"` — captured by running the CLI
+     (`go run ./cmd/youtube-cli transcript <real-youtube-url>`) with
+     `HTTPS_PROXY`/`HTTP_PROXY` pointed at an unreachable local port
+     (`http://127.0.0.1:1`), a deterministic connection-refused failure
+     with no DNS dependency and no network state left behind:
+     ```
+     ERROR: [youtube] dQw4w9WgXcQ: Unable to download API page: ('Unable to connect to proxy', NewConnectionError("HTTPSConnection(host='127.0.0.1', port=1): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it")) (caused by ProxyError(...))
+     ```
+3. The old `"ENOTFOUND"`/`"ECONNREFUSED"` substrings are removed entirely
+   — the ground-truth capture above confirmed neither Go's `net` package
+   nor yt-dlp's own stderr ever produce them.
+4. Unit-tested (`internal/core/transcript_test.go`, `TestTranscriptErrorText`)
+   — the two Node-shaped hand-constructed cases replaced with a real
+   dial-refused `net.Error` case, the same error wrapped like
+   `EnsureYtDlp` actually wraps it (proving `errors.As` survives realistic
+   wrap depth), and the two literal captured yt-dlp stderr lines above.
+   `FuzzTranscriptErrorText` added (744K executions, zero failures) for
+   no-panic coverage on arbitrary error text.
+5. **Verified end-to-end**: `go build ./... && go vet ./... && go test ./...`
+   clean, `gofmt` clean. Two real end-to-end checks against the actual
+   CLI: (a) a throwaway manual test (removed before commit, same
+   convention as task 7's throwaway MCP client) ran a genuine
+   dial-refused `net.Error` and the `.invalid`-TLD yt-dlp stderr directly
+   through `TranscriptErrorText`; (b) `go run ./cmd/youtube-cli transcript`
+   against a real YouTube URL with `HTTPS_PROXY`/`HTTP_PROXY` set to an
+   unreachable port reproduced the second phrasing live through the full
+   CLI path and confirmed it initially fell through to the generic
+   fallback — which is what prompted adding the second substring above.
+   Both phrasings now correctly produce the friendly "Network error...
+   check your internet connection" message.
