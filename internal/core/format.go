@@ -35,6 +35,51 @@ func FormatDuration(seconds float64) string {
 	return fmt.Sprintf("%d:%02d", m, s)
 }
 
+// ParseTimestamp parses a "M:SS", "MM:SS", or "H:MM:SS" timestamp string
+// into a total number of seconds. Seconds must be in [0, 60), and minutes
+// must be in [0, 60) when an hours component is present; minutes are
+// unbounded in the 2-part form (e.g. "90:00" is 5400 seconds).
+func ParseTimestamp(s string) (float64, error) {
+	parts := strings.Split(strings.TrimSpace(s), ":")
+
+	parseComponent := func(s string, max int) (int, error) {
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 0 || (max > 0 && n >= max) {
+			return 0, fmt.Errorf("invalid timestamp component %q", s)
+		}
+		return n, nil
+	}
+
+	switch len(parts) {
+	case 2:
+		m, err := parseComponent(parts[0], 0)
+		if err != nil {
+			return 0, fmt.Errorf("invalid timestamp %q: %w", s, err)
+		}
+		sec, err := parseComponent(parts[1], 60)
+		if err != nil {
+			return 0, fmt.Errorf("invalid timestamp %q: %w", s, err)
+		}
+		return float64(m*60 + sec), nil
+	case 3:
+		h, err := parseComponent(parts[0], 0)
+		if err != nil {
+			return 0, fmt.Errorf("invalid timestamp %q: %w", s, err)
+		}
+		m, err := parseComponent(parts[1], 60)
+		if err != nil {
+			return 0, fmt.Errorf("invalid timestamp %q: %w", s, err)
+		}
+		sec, err := parseComponent(parts[2], 60)
+		if err != nil {
+			return 0, fmt.Errorf("invalid timestamp %q: %w", s, err)
+		}
+		return float64(h*3600 + m*60 + sec), nil
+	default:
+		return 0, fmt.Errorf("invalid timestamp %q: expected M:SS or H:MM:SS", s)
+	}
+}
+
 var isoDurationRe = regexp.MustCompile(`PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?`)
 
 func parseISODuration(iso string) int {

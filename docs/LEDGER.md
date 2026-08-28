@@ -40,7 +40,7 @@ this index) before pausing.
 | — | Out-of-band: CI/CD (GitHub Actions; branch protection enabled, see DECISION-012) | [x] done | [docs/tasks/ci-cd/TASK.md](tasks/ci-cd/TASK.md) |
 | 10 | Packaging: GoReleaser + GitHub Releases, `go install`, Docker image, README | [x] done | [docs/tasks/10-packaging/TASK.md](tasks/10-packaging/TASK.md) |
 | — | Out-of-band: repo made public, MIT-licensed, branch protection enabled | [x] done | see `docs/DECISIONS.md` DECISION-012 |
-| 11 | Phase 2: transcript cache + `get_transcript_range` | [ ] not started | [docs/tasks/11-transcript-cache/TASK.md](tasks/11-transcript-cache/TASK.md) |
+| 11 | Phase 2: transcript cache + `get_transcript_range` | [x] done | [docs/tasks/11-transcript-cache/TASK.md](tasks/11-transcript-cache/TASK.md) |
 | 12 | Phase 2: download job tracking (`get_download_status`, `list_downloads`) | [ ] not started | [docs/tasks/12-download-jobs/TASK.md](tasks/12-download-jobs/TASK.md) |
 | 13 | Phase 2: context-aware transcript search | [ ] not started | [docs/tasks/13-context-search/TASK.md](tasks/13-context-search/TASK.md) |
 | 14 | Phase 2: chapters (`get_chapters`) | [ ] not started | [docs/tasks/14-chapters/TASK.md](tasks/14-chapters/TASK.md) |
@@ -81,18 +81,23 @@ perspective — see `docs/PLAN.md`'s "Phase 2" section for the rationale and
 `docs/DECISIONS.md` DECISION-013 for the scope-expansion decision. Each
 task has a reviewed Definition of Done + Test Plan in its own `TASK.md`.
 Implementation order is 11 → 12 → 13 → 14 → 15 (11 is the foundation the
-others lean on; 15 hard-depends on 11). None has been started. The
-pause-and-ask rule still applies between tasks. Related: BUG-003 (dead
-Node-ism branches in `TranscriptErrorText`) is fixed — see `docs/BUGS.md`
-for the full writeup (branch `fix/bug-003-transcript-error-classification`,
-pending merge to `main`).
+others lean on; 15 hard-depends on 11). Task 11 is done (2026-08-29) — see
+`docs/tasks/11-transcript-cache/TASK.md` for full detail: an in-memory
+TTL/cap-bounded transcript cache (`internal/core/transcache.go`) transparent
+to all existing `fetchSegments` callers, plus the new `get_transcript_range`
+MCP tool and its `core.ParseTimestamp`/`filterSegmentsByRange` building
+blocks. Tasks 12–15 have not been started. The pause-and-ask rule still
+applies between tasks. Related: BUG-003 (dead Node-ism branches in
+`TranscriptErrorText`) is fixed — see `docs/BUGS.md` for the full writeup
+(branch `fix/bug-003-transcript-error-classification`, pending merge to
+`main`).
 
 ## Resume checklist for next session
 
 1. Read this index first (not the individual task files, unless you need one).
 2. Run `go build ./... && go vet ./... && go test ./...` to confirm the current state still holds.
 3. Skim `docs/RETRO.md` for any still-relevant advice before starting new work.
-4. Next task: **11** (transcript cache) — its DoD + Test Plan in
-   `docs/tasks/11-transcript-cache/TASK.md` are already approved, so
+4. Next task: **12** (download job tracking) — its DoD + Test Plan in
+   `docs/tasks/12-download-jobs/TASK.md` are already approved, so
    implementation can start after confirming with the human.
 5. After finishing a task: update **that task's `TASK.md`** with full detail first, then update this index's status column/checkbox for it, then pause and ask the human before starting the next task. If the task involved a deliberate design/scope tradeoff, log it in `docs/DECISIONS.md` too; if it surfaced a way-of-working lesson that generalizes beyond that one task, log it in `docs/RETRO.md`.

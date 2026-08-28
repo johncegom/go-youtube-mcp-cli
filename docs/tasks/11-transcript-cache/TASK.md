@@ -1,7 +1,8 @@
 # Task 11: Transcript cache + windowed retrieval (`get_transcript_range`)
 
-**Status:** not started (Definition of Done + Test Plan approved 2026-08-28,
-before implementation, per the task-approval process in `CLAUDE.md`)
+**Status:** done (2026-08-29). Definition of Done + Test Plan approved
+2026-08-28, before implementation, per the task-approval process in
+`CLAUDE.md`.
 
 ## User need
 
@@ -50,25 +51,25 @@ every tool call, getting 429'd, or blowing my context window."
 
 ## Definition of Done
 
-- [ ] 11.1 `transcache.go` exists; a second `fetchSegments` call for the same
+- [x] 11.1 `transcache.go` exists; a second `fetchSegments` call for the same
   `videoID+language` within the TTL does **not** invoke yt-dlp again
   (verified in tests via an injectable fetch function + call counter).
-- [ ] 11.2 TTL expiry causes a re-fetch; the entry cap evicts and stays
+- [x] 11.2 TTL expiry causes a re-fetch; the entry cap evicts and stays
   bounded (tested with an injected clock).
-- [ ] 11.3 Fetch errors are returned to the caller but not cached; the next
+- [x] 11.3 Fetch errors are returned to the caller but not cached; the next
   call retries.
-- [ ] 11.4 Concurrent calls for the same key are safe (`go test -race`
+- [x] 11.4 Concurrent calls for the same key are safe (`go test -race`
   clean); duplicate concurrent fetches are acceptable, corruption is not.
-- [ ] 11.5 `filterSegmentsByRange` + timestamp parsing handle: `M:SS` /
+- [x] 11.5 `filterSegmentsByRange` + timestamp parsing handle: `M:SS` /
   `MM:SS` / `H:MM:SS`, open-ended start/end, out-of-bounds windows (empty
   result, not error), and reject malformed input.
-- [ ] 11.6 `get_transcript_range` registered and callable; happy path
+- [x] 11.6 `get_transcript_range` registered and callable; happy path
   returns only the windowed segments in timed format; bad input returns
   `isError: true` with a clear message.
-- [ ] 11.7 All existing transcript tools/CLI commands behave identically
+- [x] 11.7 All existing transcript tools/CLI commands behave identically
   from the outside (same output for the same input) — caching is invisible
   except for speed.
-- [ ] 11.8 `go build ./... && go vet ./... && go test ./...` clean;
+- [x] 11.8 `go build ./... && go vet ./... && go test ./...` clean;
   `gofmt` clean; no regressions.
 
 ## Test Plan
@@ -96,7 +97,40 @@ every tool call, getting 429'd, or blowing my context window."
 
 ## Notes / deviations
 
-(fill in during/after implementation)
+- Implemented as planned: `internal/core/transcache.go` (new) holds
+  `transcriptCache` (mutex-guarded map + insertion-order slice for
+  oldest-first eviction, injectable `now func() time.Time`), with a single
+  `getOrFetch(key, fetch)` entrypoint that both `transcript_test.go`'s
+  cache tests and `fetchSegments` use. `fetchSegments` in
+  `transcript.go` is now a thin cache-checking wrapper; the original
+  yt-dlp-shelling body was renamed to `fetchSegmentsFromYtDlp` unchanged.
+  Default instance: 15-minute TTL, 32-video cap.
+- `ParseTimestamp` lives in `format.go` next to `FormatTimestamp`. Minutes
+  are unbounded in the 2-part `M:SS`/`MM:SS` form (e.g. `"90:00"` parses as
+  5400s) but capped at `<60` in the 3-part `H:MM:SS` form's minutes/seconds
+  fields — this wasn't explicitly specified in the plan but follows
+  naturally from what a human would actually type, and is covered by
+  table-driven tests round-tripping through `FormatTimestamp`.
+- `filterSegmentsByRange` treats both `start` and `end` as inclusive
+  boundaries (a segment exactly at the boundary offset is included) — this
+  was the one boundary-inclusion choice not pinned down verbatim in the
+  plan/TASK.md; recorded here as the resolution.
+- `get_transcript_range`'s handler validates start/end timestamps and
+  `start > end` before calling into `core`, matching the existing
+  `searchTranscriptHandler` inline-validation style — no new
+  validation-framework code was introduced.
+- Manual smoke test performed against a live video (`dQw4w9WgXcQ`) with
+  temporary debug logging in `fetchSegmentsFromYtDlp` (removed before
+  commit, via a throwaway `cmd/smoketest/main.go` also removed before
+  commit): `GetTranscriptText` → `SearchInTranscript` → `GetTranscriptTimed`
+  triggered exactly one yt-dlp invocation (debug line printed once), and
+  `GetTranscriptRange("0:30", "1:00")` returned only the 9 lines within
+  that window. `ParseTimestamp("abc")` correctly errored. Exercised at the
+  `internal/core` level rather than through a full MCP stdio client (the
+  handler's validation branches are separately covered by
+  `internal/mcpserver/tools_test.go`, and the handler is a thin,
+  already-reviewed wrapper over `core.GetTranscriptRange`).
+- CLI: no new subcommand added, as scoped.
 
 ## After finishing
 

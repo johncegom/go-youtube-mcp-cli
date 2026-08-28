@@ -131,6 +131,43 @@ func TestSearchSegments_CaseInsensitive(t *testing.T) {
 	}
 }
 
+// f64 returns a pointer to v, for building *float64 range bounds in tests.
+func f64(v float64) *float64 { return &v }
+
+// filterSegmentsByRange has no upstream TS equivalent (new in task 11).
+// Ground truth is the function's own specification from
+// docs/tasks/11-transcript-cache/TASK.md: inclusive of segments whose
+// Offset falls exactly on start or end, a nil bound is open-ended, and an
+// out-of-bounds window yields an empty (not nil-panicking) result.
+func TestFilterSegmentsByRange(t *testing.T) {
+	segs := []transcriptSegment{
+		{Text: "a", Offset: 0, Duration: 1000},
+		{Text: "b", Offset: 2500, Duration: 2500},
+		{Text: "c", Offset: 65200, Duration: 1800},
+	}
+	cases := []struct {
+		name           string
+		startMs, endMs *float64
+		want           []transcriptSegment
+	}{
+		{"open-ended both", nil, nil, segs},
+		{"open start", nil, f64(2500), segs[:2]},
+		{"open end", f64(2500), nil, segs[1:]},
+		{"exact boundary inclusive on start", f64(2500), f64(2500), segs[1:2]},
+		{"exact boundary inclusive on end", f64(0), f64(0), segs[0:1]},
+		{"window covering only middle", f64(1000), f64(3000), segs[1:2]},
+		{"out of bounds window", f64(1_000_000), f64(2_000_000), nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := filterSegmentsByRange(segs, tc.startMs, tc.endMs)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("filterSegmentsByRange() = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
 // pickVttFile has no upstream TS equivalent (the TS original just takes
 // vttFiles[0] blindly, which is BUG-001's second contributing cause — see
 // docs/BUGS.md). Ground truth here is the fix's own specification: prefer a
