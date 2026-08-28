@@ -57,6 +57,52 @@ func TestParseISODuration(t *testing.T) {
 	}
 }
 
+// ParseTimestamp's valid cases are derived by round-tripping through
+// FormatTimestamp (e.g. FormatTimestamp(65) == "01:05", so
+// ParseTimestamp("01:05") must equal 65) plus a few hand-picked cases for
+// forms FormatTimestamp never itself produces (unpadded "M:SS", minutes
+// >59 in a 2-part timestamp) that a human is still expected to be able to
+// type.
+func TestParseTimestamp(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    float64
+		wantErr bool
+	}{
+		{"00:00", 0, false},
+		{"0:05", 5, false},
+		{"01:05", 65, false},
+		{"1:05", 65, false},
+		{"59:59", 3599, false},
+		{"1:00:00", 3600, false},
+		{"1:01:05", 3665, false},
+		{"90:00", 5400, false}, // minutes unbounded in 2-part form
+		{"", 0, true},
+		{"abc", 0, true},
+		{"1:2:3:4", 0, true},
+		{"1:60", 0, true},    // seconds out of range
+		{"1:99:00", 0, true}, // minutes out of range in 3-part form
+		{"-1:00", 0, true},
+		{"1:-5", 0, true},
+	}
+	for _, tc := range cases {
+		got, err := ParseTimestamp(tc.in)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("ParseTimestamp(%q) = %v, nil, want an error", tc.in, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("ParseTimestamp(%q) returned unexpected error: %v", tc.in, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("ParseTimestamp(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestSanitizeTitle(t *testing.T) {
 	cases := []struct {
 		title string

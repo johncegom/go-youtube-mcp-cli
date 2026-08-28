@@ -31,6 +31,13 @@ type searchInput struct {
 	Language string `json:"language,omitempty" jsonschema:"Optional. Language code. Defaults to 'en'."`
 }
 
+type rangeInput struct {
+	URL      string `json:"url" jsonschema:"The full YouTube URL or video ID"`
+	Start    string `json:"start,omitempty" jsonschema:"Optional start timestamp (e.g. '1:30' or '1:02:03'). Omit for the beginning of the video."`
+	End      string `json:"end,omitempty" jsonschema:"Optional end timestamp (e.g. '3:45' or '1:05:00'). Omit for the end of the video."`
+	Language string `json:"language,omitempty" jsonschema:"Optional. Language code for the transcript (e.g. 'en', 'it'). Defaults to 'en'."`
+}
+
 type downloadVideoInput struct {
 	URL       string `json:"url" jsonschema:"The full YouTube URL or video ID"`
 	Quality   string `json:"quality,omitempty" jsonschema:"Optional. 'hd720' (default), 'best', 'hd1080', 'sd480', 'sd360'."`
@@ -89,6 +96,41 @@ func getTranscriptTimedHandler(ctx context.Context, _ *mcp.CallToolRequest, in u
 		return invalidURLResult(in.URL), nil, nil
 	}
 	text, err := core.GetTranscriptTimed(ctx, videoID, in.Language)
+	if err != nil {
+		return textResult(core.TranscriptErrorText(videoID, err), true), nil, nil
+	}
+	return textResult(text, false), nil, nil
+}
+
+// getTranscriptRangeHandler returns only the transcript segments within
+// [start, end] (either may be omitted for an open-ended range), formatted
+// as timed lines.
+func getTranscriptRangeHandler(ctx context.Context, _ *mcp.CallToolRequest, in rangeInput) (*mcp.CallToolResult, any, error) {
+	videoID := core.ExtractVideoID(in.URL)
+	if videoID == "" {
+		return invalidURLResult(in.URL), nil, nil
+	}
+
+	var startSec, endSec *float64
+	if strings.TrimSpace(in.Start) != "" {
+		s, err := core.ParseTimestamp(in.Start)
+		if err != nil {
+			return textResult(fmt.Sprintf("Invalid start timestamp %q: %s", in.Start, err), true), nil, nil
+		}
+		startSec = &s
+	}
+	if strings.TrimSpace(in.End) != "" {
+		e, err := core.ParseTimestamp(in.End)
+		if err != nil {
+			return textResult(fmt.Sprintf("Invalid end timestamp %q: %s", in.End, err), true), nil, nil
+		}
+		endSec = &e
+	}
+	if startSec != nil && endSec != nil && *startSec > *endSec {
+		return textResult("Invalid range: start must not be after end.", true), nil, nil
+	}
+
+	text, err := core.GetTranscriptRange(ctx, videoID, in.Language, startSec, endSec)
 	if err != nil {
 		return textResult(core.TranscriptErrorText(videoID, err), true), nil, nil
 	}
@@ -235,7 +277,7 @@ func downloadTranscriptTimedHandler(ctx context.Context, _ *mcp.CallToolRequest,
 
 // ── Server construction ──────────────────────────────────────────────────
 
-// NewServer builds the youtube-mcp-cli MCP server with all 10 tools
+// NewServer builds the youtube-mcp-cli MCP server with all 12 tools
 // registered (including the 3 alias pairs, which point at the same
 // handler function as their canonical tool).
 func NewServer(version string) *mcp.Server {
@@ -255,6 +297,11 @@ func NewServer(version string) *mcp.Server {
 		Name:        "get_transcript_timestamps",
 		Description: "Fetches the transcript with timestamps for each segment. (Alias for get_transcript_timed)",
 	}, getTranscriptTimedHandler)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_transcript_range",
+		Description: "Fetches a windowed portion of the transcript between start and end timestamps (e.g. '1:30' to '3:45'). Either may be omitted for an open-ended range.",
+	}, getTranscriptRangeHandler)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_metadata",

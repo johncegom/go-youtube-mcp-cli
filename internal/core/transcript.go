@@ -111,6 +111,23 @@ func transcriptTimed(segments []transcriptSegment) string {
 	return strings.Join(lines, "\n")
 }
 
+// filterSegmentsByRange returns segments whose Offset (ms) falls within
+// [startMs, endMs], inclusive of both bounds. A nil bound is open-ended on
+// that side.
+func filterSegmentsByRange(segments []transcriptSegment, startMs, endMs *float64) []transcriptSegment {
+	var out []transcriptSegment
+	for _, s := range segments {
+		if startMs != nil && s.Offset < *startMs {
+			continue
+		}
+		if endMs != nil && s.Offset > *endMs {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
 func searchSegments(segments []transcriptSegment, query string) []transcriptSegment {
 	lowerQuery := strings.ToLower(query)
 	var matches []transcriptSegment
@@ -201,7 +218,17 @@ func pickVttFile(files []string, language string) string {
 
 // ── Fetching (I/O) ────────────────────────────────────────────────────────
 
+// fetchSegments returns the parsed transcript for videoID+language, serving
+// a cached result when available (see transcache.go) instead of re-shelling
+// out to yt-dlp on every call.
 func fetchSegments(ctx context.Context, videoID, language string) ([]transcriptSegment, error) {
+	key := cacheKey{videoID: videoID, language: language}
+	return defaultCache.getOrFetch(key, func() ([]transcriptSegment, error) {
+		return fetchSegmentsFromYtDlp(ctx, videoID, language)
+	})
+}
+
+func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) ([]transcriptSegment, error) {
 	if err := EnsureYtDlp(ctx); err != nil {
 		return nil, err
 	}
@@ -293,6 +320,29 @@ func GetTranscriptTimed(ctx context.Context, videoID, language string) (string, 
 		return "", err
 	}
 	return transcriptTimed(segments), nil
+}
+
+// secToMsPtr converts a *float64 seconds bound to a *float64 milliseconds
+// bound, preserving nil (open-ended).
+func secToMsPtr(sec *float64) *float64 {
+	if sec == nil {
+		return nil
+	}
+	ms := *sec * 1000
+	return &ms
+}
+
+// GetTranscriptRange fetches the transcript and returns only the segments
+// whose offset falls within [startSec, endSec] (a nil bound is
+// open-ended), formatted as timed lines. An out-of-bounds or otherwise
+// empty window returns an empty string, not an error.
+func GetTranscriptRange(ctx context.Context, videoID, language string, startSec, endSec *float64) (string, error) {
+	segments, err := fetchSegments(ctx, videoID, normalizeLanguage(language))
+	if err != nil {
+		return "", err
+	}
+	filtered := filterSegmentsByRange(segments, secToMsPtr(startSec), secToMsPtr(endSec))
+	return transcriptTimed(filtered), nil
 }
 
 // SearchInTranscript searches for a keyword/phrase in the transcript and

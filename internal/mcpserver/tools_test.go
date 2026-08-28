@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -145,4 +146,65 @@ func FuzzInvalidURLResult(f *testing.F) {
 			t.Error("invalidURLResult() produced empty text")
 		}
 	})
+}
+
+// getTranscriptRangeHandler's input-validation paths (invalid URL, invalid
+// timestamp, start > end) all return before reaching core.GetTranscriptRange
+// (which shells out to yt-dlp), so they're directly testable here without
+// network access. The happy path is covered by the manual smoke test in
+// docs/tasks/11-transcript-cache/TASK.md's Test Plan, matching the
+// project's convention for I/O-bound entrypoints (see CLAUDE.md's TDD
+// section).
+
+func TestGetTranscriptRangeHandler_InvalidURL(t *testing.T) {
+	res, _, err := getTranscriptRangeHandler(context.Background(), nil, rangeInput{URL: "not a url"})
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if !res.IsError {
+		t.Error("IsError = false, want true for an invalid URL")
+	}
+	if !strings.Contains(contentText(t, res), "not a url") {
+		t.Errorf("text = %q, want it to mention the invalid url", contentText(t, res))
+	}
+}
+
+func TestGetTranscriptRangeHandler_InvalidStartTimestamp(t *testing.T) {
+	res, _, err := getTranscriptRangeHandler(context.Background(), nil, rangeInput{
+		URL:   "dQw4w9WgXcQ",
+		Start: "abc",
+	})
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if !res.IsError {
+		t.Error("IsError = false, want true for an invalid start timestamp")
+	}
+}
+
+func TestGetTranscriptRangeHandler_InvalidEndTimestamp(t *testing.T) {
+	res, _, err := getTranscriptRangeHandler(context.Background(), nil, rangeInput{
+		URL: "dQw4w9WgXcQ",
+		End: "not-a-timestamp",
+	})
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if !res.IsError {
+		t.Error("IsError = false, want true for an invalid end timestamp")
+	}
+}
+
+func TestGetTranscriptRangeHandler_StartAfterEnd(t *testing.T) {
+	res, _, err := getTranscriptRangeHandler(context.Background(), nil, rangeInput{
+		URL:   "dQw4w9WgXcQ",
+		Start: "5:00",
+		End:   "1:00",
+	})
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if !res.IsError {
+		t.Error("IsError = false, want true when start is after end")
+	}
 }
