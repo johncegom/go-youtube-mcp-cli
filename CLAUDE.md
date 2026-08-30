@@ -50,6 +50,31 @@ sub-tasks are `[x]`).
 
 When a bug is found (including latent bugs inherited from the upstream TS project that a faithful port reproduces), it goes into `docs/BUGS.md`, not a silent fix. Add an entry with symptom and root cause (or say explicitly that root cause is unknown), propose options if there's an obvious fix, and **wait for a human decision before applying it** — the same pause-and-ask discipline that applies to `docs/LEDGER.md`'s numbered tasks applies to bugs.
 
+Every entry must state **Reachability** (real call path today, vs. only a
+test built to hit it) — see "Proportionality" below.
+
+### Proportionality: avoid overengineering, ceremony sized to risk
+
+Overengineering = **code or design that solves problems you don't have.**
+Rationale/history: `docs/RETRO.md` RETRO-003.
+
+- Write idiomatic Go, not a TS-shaped port. Add abstraction, config knobs,
+  or defensive branches only for a real, currently-reachable call path in
+  this codebase — not to mirror TS's structure or "just in case."
+- Before adding a guard, name the caller. No real caller (only a test
+  built to hit the branch) → fix inline, same change, no `docs/BUGS.md`
+  entry/branch/PR needed.
+- KISS: among designs that equally satisfy a real reachable requirement,
+  pick the one with the fewest moving parts.
+- Full `docs/BUGS.md` ceremony (entry, human decision gate, dedicated
+  branch/PR) is reserved for bugs marked **Reachable: yes**.
+- Extra defensiveness/branching/abstraction beyond the obvious minimal fix
+  needs a stated reason (a reachable input) in the commit/PR/TASK.md —
+  "just in case" isn't one.
+- Exception: strict-TDD ground-truth rigor for *ported* functions stays
+  (parity drift is real risk); this only trims ceremony/complexity that
+  isn't earning its keep.
+
 ### Continuous improvement retrospective
 
 This is about the **way of working** — process, tooling, collaboration

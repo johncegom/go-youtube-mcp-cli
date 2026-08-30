@@ -82,3 +82,31 @@ improvement.
   or a release binary — as a small throwaway program). Write it once,
   parameterize the command, reuse it for every future stdio smoke test in
   this repo instead of reinventing a pipe test each time.
+
+## RETRO-003: bug ceremony and defensive code weren't scaled to actual risk (BUG-004/BUG-005)
+
+- **What went well:** the test-coverage-hardening pass genuinely found a
+  real, reachable bug (BUG-004, a path-traversal gap in `ResolveOutputDir`)
+  by writing the first unit tests `paths.go` had ever had — exhaustive
+  test-writing is a legitimate way to surface bugs that manual smoke
+  testing never would have hit.
+- **What could be improved about how the work got done:** a second finding
+  from the same pass, BUG-005 (`transcriptCache.set` panicking on a
+  negative cap), was only reachable by a test written specifically to pass
+  `-1` — no real caller anywhere in the codebase can produce a negative
+  `cap` (`defaultCache` hardcodes it to `32`). Fixing it was correct and
+  cheap, but it was routed through the exact same ceremony as BUG-004: a
+  `docs/BUGS.md` entry, a "pending human decision" pause, its own branch,
+  and its own PR. Two evaluation passes (prompted directly in chat, not by
+  a task) concluded this is a recurring pattern: process and code
+  defensiveness that don't scale down for low real-world risk, because
+  nothing in the bug-tracking process asked "can this input ever actually
+  occur here?" before deciding how much ceremony the fix deserved.
+- **Advice for next time:** every `docs/BUGS.md` entry now must record
+  **Reachability** (a real call path today vs. only a test built to hit
+  it), and only reachable bugs get the full dedicated-branch/PR/decision
+  ceremony — see the new "Proportionality" section in `CLAUDE.md`. Before
+  adding a guard, abstraction, or extra branch the upstream TS code
+  doesn't have, name the specific caller that needs it; "no real caller,
+  only a coverage-seeking test" means fix it inline in the same change and
+  skip the separate ceremony, not skip the fix.
