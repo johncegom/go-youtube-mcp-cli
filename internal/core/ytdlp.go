@@ -63,7 +63,12 @@ func requireFFmpeg(ffmpegPath string) error {
 // call repeatedly; the actual install work runs once per process.
 func EnsureYtDlp(ctx context.Context) error {
 	installOnce.Do(func() {
-		if _, err := ytdlp.Install(ctx, nil); err != nil {
+		// AllowVersionMismatch: accept whatever yt-dlp is already resolved
+		// (cache or PATH) even if its version doesn't match go-ytdlp's
+		// pinned Version const, instead of silently re-downloading and
+		// overwriting it back down to that (often stale) pinned version —
+		// see docs/BUGS.md BUG-006.
+		if _, err := ytdlp.Install(ctx, &ytdlp.InstallOptions{AllowVersionMismatch: true}); err != nil {
 			installErr = fmt.Errorf("yt-dlp binary not found and auto-install failed: %w", err)
 			return
 		}
