@@ -183,7 +183,7 @@ using one substring match for both:
 
 ## BUG-004: `pathStartsWith` does a string-prefix compare, not a path-segment compare
 
-- **Status:** open
+- **Status:** fixed
 - **Discovered:** test-coverage-hardening review of `internal/core/paths.go` (2026-08-30), while writing the first unit tests that file has ever had. Not triggered by a runtime failure.
 - **Inherited from upstream:** no — this is a Go-only file (`docs/DECISIONS.md` DECISION-002); no TS equivalent to compare against.
 
@@ -234,7 +234,17 @@ separator boundary. The function needs to check that `child` equals
 
 ### Decision
 
-Pending human decision.
+Fix now (human decision, this session). Implemented as:
+1. `pathStartsWith` (`internal/core/paths.go`) now requires an exact match
+   or a separator-bounded prefix (`c == p || strings.HasPrefix(c, p +
+   string(filepath.Separator))`), with the existing case-folding on Windows
+   kept as-is.
+2. `internal/core/paths_test.go`'s `TestPathStartsWith_SegmentBoundaryBug`
+   (which pinned the buggy behavior) was flipped to
+   `TestPathStartsWith_SegmentBoundary`, now asserting the sibling directory
+   is correctly rejected while a true subdirectory is still accepted.
+3. Verified: `go build ./...`, `go vet ./...`, `go test ./...`, and `gofmt`
+   all clean.
 
 ---
 
