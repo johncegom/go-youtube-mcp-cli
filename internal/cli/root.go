@@ -12,13 +12,18 @@ import (
 
 var quietFlag bool
 
+// exitFunc is os.Exit by default; tests swap it for a recorder so exit-1
+// paths (fatal, search's "no matches" branch) can be asserted in-process
+// instead of actually terminating the test binary. See docs/DECISIONS.md.
+var exitFunc = os.Exit
+
 // fatal prints an "error: ..." message to stderr and exits the process with
 // status 1, mirroring the TS CLI's fatal() helper. It "returns" an error
 // only so it can be used as `return fatal(...)` inside a RunE func; the
 // process has already exited by the time that return executes.
 func fatal(format string, args ...any) error {
 	fmt.Fprintf(os.Stderr, "error: "+format+"\n", args...)
-	os.Exit(1)
+	exitFunc(1)
 	return nil
 }
 

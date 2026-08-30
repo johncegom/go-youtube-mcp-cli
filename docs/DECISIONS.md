@@ -207,6 +207,14 @@ was blocked in the first place.
   reversible — anything already cloned or cached during the public window
   stays out even if visibility is later reverted.
 
+## DECISION-014: `internal/cli` gets an injectable `exitFunc` seam for testability
+
+- **Where:** `internal/cli/root.go` (`var exitFunc = os.Exit`, used by `fatal()`), `internal/cli/search.go` (`printSearchResult`'s "no matches" branch)
+- **Context:** `internal/cli` had zero test coverage — flagged by the test-coverage-hardening audit. The main structural blocker was `fatal()` calling `os.Exit(1)` directly (and `search.go`'s "no matches" branch doing the same inline), which would terminate the test binary itself if exercised in-process.
+- **Decision:** introduce a package-level `var exitFunc = os.Exit`, called by `fatal()` and by a new `printSearchResult` helper (extracted from `search.go`'s `RunE`) instead of calling `os.Exit` directly. Tests swap `exitFunc` for a recording stub and restore it via `defer`. Also extracted `formatMetadataJSON`/`formatMetadataPlain` out of `metadata.go`'s `RunE` into pure, directly-testable functions, for the same reason (output-format assertions without needing a live `FetchVideoMetadata` call).
+- **Alternatives considered:** leave `fatal`/`os.Exit` untouched and only test what's reachable without hitting an exit path (flag defaults only) — rejected because it was explicitly put to the human via `AskUserQuestion` and the seam was approved as the better tradeoff; running CLI subcommands as a real subprocess (`os/exec`) and asserting on the exit code — works but is slower and heavier per-test than an in-process stub, and doesn't help unit-test the pure formatting logic anyway.
+- **Consequences:** `fatal()` and `printSearchResult`'s exit-1 path, and `metadata.go`'s two output formats, are now directly unit-tested (`internal/cli/root_test.go`, `search_test.go`, `metadata_test.go`). Behavior is unchanged in the real binary (`exitFunc` is never reassigned outside tests). `search.go` and `metadata.go` gained two small extracted helper functions as a result — no behavior change, same output as before the refactor.
+
 ## DECISION-013: Phase 2 scoped — the "faithful port only" constraint lifted for five approved tasks
 
 - **Where:** `docs/PLAN.md` ("Phase 2" section); `docs/LEDGER.md` tasks

@@ -2,12 +2,25 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
 	"github.com/johncegom/go-youtube-mcp-cli/internal/core"
 	"github.com/spf13/cobra"
 )
+
+// printSearchResult writes result to out, unless it's a "no matches found"
+// message, in which case it's written to errOut and the process exits 1
+// (via exitFunc, seamed for tests).
+func printSearchResult(out, errOut io.Writer, result string) {
+	if strings.HasPrefix(result, "No matches found") {
+		fmt.Fprintln(errOut, result)
+		exitFunc(1)
+		return
+	}
+	fmt.Fprintln(out, result)
+}
 
 func newSearchCommand() *cobra.Command {
 	var language string
@@ -32,11 +45,7 @@ func newSearchCommand() *cobra.Command {
 				return fatal("%s", core.TranscriptErrorText(videoID, err))
 			}
 
-			if strings.HasPrefix(result, "No matches found") {
-				fmt.Fprintln(os.Stderr, result)
-				os.Exit(1)
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), result)
+			printSearchResult(cmd.OutOrStdout(), os.Stderr, result)
 			return nil
 		},
 	}

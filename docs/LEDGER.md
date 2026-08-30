@@ -45,6 +45,7 @@ this index) before pausing.
 | 13 | Phase 2: context-aware transcript search | [ ] not started | [docs/tasks/13-context-search/TASK.md](tasks/13-context-search/TASK.md) |
 | 14 | Phase 2: chapters (`get_chapters`) | [ ] not started | [docs/tasks/14-chapters/TASK.md](tasks/14-chapters/TASK.md) |
 | 15 | Phase 2: playlist listing + cross-video search (depends on 11) | [ ] not started | [docs/tasks/15-playlist-search/TASK.md](tasks/15-playlist-search/TASK.md) |
+| — | Out-of-band: test-coverage hardening (tiers 1-4) | [x] done | [docs/tasks/test-coverage-hardening/TASK.md](tasks/test-coverage-hardening/TASK.md) |
 
 ## Current status
 
@@ -88,9 +89,25 @@ to all existing `fetchSegments` callers, plus the new `get_transcript_range`
 MCP tool and its `core.ParseTimestamp`/`filterSegmentsByRange` building
 blocks. Tasks 12–15 have not been started. The pause-and-ask rule still
 applies between tasks. Related: BUG-003 (dead Node-ism branches in
-`TranscriptErrorText`) is fixed — see `docs/BUGS.md` for the full writeup
-(branch `fix/bug-003-transcript-error-classification`, pending merge to
-`main`).
+`TranscriptErrorText`) is fixed and merged to `main` (PR #10, commit
+`be6c93d`) — see `docs/BUGS.md` for the full writeup.
+
+**Out-of-band test-coverage hardening is done (2026-08-30)** — see
+`docs/tasks/test-coverage-hardening/TASK.md`. Closed the highest-risk gaps
+found by a coverage audit: `internal/core/paths.go` (previously zero tests)
+now has a full test file; `internal/cli` (previously zero tests) now has
+cobra wiring/flag/output-format tests plus a new `exitFunc` seam
+(`docs/DECISIONS.md` DECISION-014) so exit-1 paths are testable;
+`internal/mcpserver` now covers all 12 tools' validation branches plus a
+real in-process round-trip test proving alias tools are wired to their
+canonical handler; `transcache.go` gained cap/TTL boundary tests; CI's
+`go test` now runs with `-race`. Surfaced two new bugs along the way
+(neither fixed yet, both open pending decision): **BUG-004** (a
+path-traversal-allowlist boundary bug in `pathStartsWith`) and **BUG-005**
+(a negative-cap panic in `transcriptCache.set`, not reachable via any
+current code path). Tier 5 (httptest/fake-binary I/O-boundary tests for
+`FetchVideoMetadata`/`fetchSegmentsFromYtDlp`) was explicitly deferred to a
+future task.
 
 ## Resume checklist for next session
 
