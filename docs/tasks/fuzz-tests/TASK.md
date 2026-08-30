@@ -20,6 +20,12 @@ that parse the most externally-influenced/adversarial-ish input:
   not panic. VTT content comes straight from a `yt-dlp`-downloaded subtitle
   file (network-sourced, effectively untrusted).
 
+A fourth fuzz target was added later (BUG-003's fix, PR #10) but never
+recorded here: **`FuzzTranscriptErrorText`** (`internal/core/transcript_test.go`)
+— invariant: must not panic on arbitrary error text, since the text
+classified here can originate from `yt-dlp`'s own stderr (see
+`docs/BUGS.md` BUG-003). 744K executions, zero failures.
+
 Each was fuzzed for 10s locally (`go test ./internal/core/... -run '^$'
 -fuzz FuzzX -fuzztime 10s`) — 150K–380K executions each, zero failures,
 confirming the invariants hold. No crashers were found, so nothing was

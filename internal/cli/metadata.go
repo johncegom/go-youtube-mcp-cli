@@ -3,10 +3,49 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/johncegom/go-youtube-mcp-cli/internal/core"
 	"github.com/spf13/cobra"
 )
+
+// formatMetadataJSON renders meta as indented JSON, matching the --json flag.
+func formatMetadataJSON(meta map[string]string) (string, error) {
+	b, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// formatMetadataPlain writes meta's hand-formatted plain-text block to out,
+// omitting any field that's empty.
+func formatMetadataPlain(out io.Writer, meta map[string]string) {
+	if meta["title"] != "" {
+		fmt.Fprintf(out, "Title:       %s\n", meta["title"])
+	}
+	if meta["channel"] != "" {
+		fmt.Fprintf(out, "Channel:     %s\n", meta["channel"])
+	}
+	if meta["publishDate"] != "" {
+		fmt.Fprintf(out, "Published:   %s\n", meta["publishDate"])
+	}
+	if meta["viewCount"] != "" {
+		fmt.Fprintf(out, "Views:       %s\n", meta["viewCount"])
+	}
+	if meta["duration"] != "" {
+		fmt.Fprintf(out, "Duration:    %s\n", meta["duration"])
+	}
+	if meta["channelUrl"] != "" {
+		fmt.Fprintf(out, "Channel URL: %s\n", meta["channelUrl"])
+	}
+	if meta["channelId"] != "" {
+		fmt.Fprintf(out, "Channel ID:  %s\n", meta["channelId"])
+	}
+	if meta["description"] != "" {
+		fmt.Fprintf(out, "\nDescription:\n%s\n", meta["description"])
+	}
+}
 
 func newMetadataCommand() *cobra.Command {
 	var jsonOutput bool
@@ -33,38 +72,15 @@ func newMetadataCommand() *cobra.Command {
 
 			out := cmd.OutOrStdout()
 			if jsonOutput {
-				b, err := json.MarshalIndent(meta, "", "  ")
+				s, err := formatMetadataJSON(meta)
 				if err != nil {
 					return fatal("%s", err.Error())
 				}
-				fmt.Fprintln(out, string(b))
+				fmt.Fprintln(out, s)
 				return nil
 			}
 
-			if meta["title"] != "" {
-				fmt.Fprintf(out, "Title:       %s\n", meta["title"])
-			}
-			if meta["channel"] != "" {
-				fmt.Fprintf(out, "Channel:     %s\n", meta["channel"])
-			}
-			if meta["publishDate"] != "" {
-				fmt.Fprintf(out, "Published:   %s\n", meta["publishDate"])
-			}
-			if meta["viewCount"] != "" {
-				fmt.Fprintf(out, "Views:       %s\n", meta["viewCount"])
-			}
-			if meta["duration"] != "" {
-				fmt.Fprintf(out, "Duration:    %s\n", meta["duration"])
-			}
-			if meta["channelUrl"] != "" {
-				fmt.Fprintf(out, "Channel URL: %s\n", meta["channelUrl"])
-			}
-			if meta["channelId"] != "" {
-				fmt.Fprintf(out, "Channel ID:  %s\n", meta["channelId"])
-			}
-			if meta["description"] != "" {
-				fmt.Fprintf(out, "\nDescription:\n%s\n", meta["description"])
-			}
+			formatMetadataPlain(out, meta)
 			return nil
 		},
 	}

@@ -178,3 +178,97 @@ using one substring match for both:
    fallback — which is what prompted adding the second substring above.
    Both phrasings now correctly produce the friendly "Network error...
    check your internet connection" message.
+
+---
+
+## BUG-004: `pathStartsWith` does a string-prefix compare, not a path-segment compare
+
+- **Status:** open
+- **Discovered:** test-coverage-hardening review of `internal/core/paths.go` (2026-08-30), while writing the first unit tests that file has ever had. Not triggered by a runtime failure.
+- **Inherited from upstream:** no — this is a Go-only file (`docs/DECISIONS.md` DECISION-002); no TS equivalent to compare against.
+
+### Symptom
+
+`ResolveOutputDir` is the allowlist gate deciding whether a caller-supplied
+output directory is allowed to sit under the user's home or temp directory
+before `yt-dlp` is told to write files there. Its boundary check,
+`pathStartsWith` (`internal/core/paths.go:35-41`), does:
+
+```go
+func pathStartsWith(child, parent string) bool {
+	normalised := filepath.Clean(parent)
+	if runtime.GOOS == "windows" {
+		return strings.HasPrefix(strings.ToLower(child), strings.ToLower(normalised))
+	}
+	return strings.HasPrefix(child, normalised)
+}
+```
+
+This is a **string** prefix check, not a **path-segment** check. If the
+allowed root is `/home/user`, a resolved directory of `/home/userXYZ/evil`
+(no path separator between `user` and `XYZ`) also satisfies
+`strings.HasPrefix`, and so is treated as inside the allowed root and passes
+`ResolveOutputDir`, even though it's a sibling directory outside it.
+
+### Root cause
+
+`strings.HasPrefix` compares raw characters; it has no concept of a path
+separator boundary. The function needs to check that `child` equals
+`parent` or that `child` starts with `parent + string(filepath.Separator)`
+(with the usual case-insensitive treatment kept for Windows).
+
+### Options
+
+- **Fix now:** change `pathStartsWith` to require an exact match or a
+  separator-bounded prefix, e.g. `child == normalised ||
+  strings.HasPrefix(child, normalised+string(filepath.Separator))` (case-folded
+  on Windows as today). Low risk, small, isolated change; the new
+  `paths_test.go` test added under the test-coverage-hardening task already
+  demonstrates the gap and can be flipped to assert the fixed behavior.
+- **Leave as-is:** in practice, `allowedOutputRoots` is `os.TempDir()` and
+  the user's home directory — both fairly deep, "sibling directory with a
+  same-prefixed name" is a narrow attack surface on a single-user local tool
+  (this isn't a multi-tenant server; see DECISION-011 on why remote/
+  multi-client MCP access is deliberately not shipped yet). Still worth
+  fixing since the cost is trivial.
+
+### Decision
+
+Pending human decision.
+
+---
+
+## BUG-005: `transcriptCache.set` panics on a negative cap
+
+- **Status:** open
+- **Discovered:** test-coverage-hardening review of `internal/core/transcache.go` (2026-08-30), while adding cap-boundary unit tests. Not triggered by a runtime failure — `cap` is currently only ever `32` via the single process-wide `defaultCache` (`internal/core/transcache.go:46`), so this isn't reachable through any current code path.
+- **Inherited from upstream:** no — this cache is new in task 11, no TS equivalent.
+
+### Symptom
+
+`set`'s eviction loop is:
+
+```go
+for len(c.entries) > c.cap {
+	oldest := c.order[0]
+	...
+}
+```
+
+If `c.cap` is negative, this condition (`len(c.entries) > c.cap`) is true even
+when `c.entries` is empty (`0 > -1`), so `c.order[0]` indexes an empty slice
+and panics with an index-out-of-range runtime error.
+
+### Root cause
+
+The loop condition assumes `cap >= 0`; there's no validation on the value
+passed to `newTranscriptCache`.
+
+### Options
+
+- **Fix now:** clamp `cap` to a minimum of 0 in `newTranscriptCache` (or guard the loop with `len(c.order) > 0`), and decide what a `cap <= 0` cache should mean in practice (most likely: "never actually caches anything," matching the already-tested `cap == 0` behavior).
+- **Leave as-is:** `cap` is never externally configurable today (`defaultCache` is a fixed literal), so there is no live attack surface. Worth fixing opportunistically since it's a one-line guard, but not urgent.
+
+### Decision
+
+Pending human decision.
