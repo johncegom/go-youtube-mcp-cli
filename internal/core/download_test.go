@@ -32,15 +32,15 @@ func TestQualityFormat(t *testing.T) {
 }
 
 func TestFormatVideoDownloadStarted(t *testing.T) {
-	want := "Download started:\nTitle: My Video\nThe file will appear at: /home/user/Downloads/My_Video.mp4 (extension may differ if H.264 is unavailable)\nIt may take a while for long videos."
-	if got := formatVideoDownloadStarted("My Video", "/home/user/Downloads/My_Video.mp4"); got != want {
+	want := "Download started:\nJob ID: dl-1\nTitle: My Video\nThe file will appear at: /home/user/Downloads/My_Video.mp4 (extension may differ if H.264 is unavailable)\nIt may take a while for long videos."
+	if got := formatVideoDownloadStarted("dl-1", "My Video", "/home/user/Downloads/My_Video.mp4"); got != want {
 		t.Errorf("formatVideoDownloadStarted() = %q, want %q", got, want)
 	}
 }
 
 func TestFormatAudioDownloadStarted(t *testing.T) {
-	want := "Download started:\nTitle: My Video\nThe file will appear at: /home/user/Downloads/My_Video.mp3\nIt may take a while for long videos."
-	if got := formatAudioDownloadStarted("My Video", "/home/user/Downloads/My_Video.mp3"); got != want {
+	want := "Download started:\nJob ID: dl-1\nTitle: My Video\nThe file will appear at: /home/user/Downloads/My_Video.mp3\nIt may take a while for long videos."
+	if got := formatAudioDownloadStarted("dl-1", "My Video", "/home/user/Downloads/My_Video.mp3"); got != want {
 		t.Errorf("formatAudioDownloadStarted() = %q, want %q", got, want)
 	}
 }

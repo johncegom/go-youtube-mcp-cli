@@ -50,6 +50,12 @@ type downloadAudioInput struct {
 	OutputDir string `json:"outputDir,omitempty" jsonschema:"Optional. Directory to save. Defaults to ~/Downloads."`
 }
 
+type jobStatusInput struct {
+	JobID string `json:"jobId" jsonschema:"The job ID returned by download_video or download_audio (e.g. 'dl-1')."`
+}
+
+type listDownloadsInput struct{}
+
 type downloadTranscriptInput struct {
 	URL       string `json:"url" jsonschema:"The full YouTube URL or video ID"`
 	Language  string `json:"language,omitempty" jsonschema:"Optional. Language code. Defaults to 'en'."`
@@ -243,6 +249,18 @@ func downloadAudioHandler(ctx context.Context, _ *mcp.CallToolRequest, in downlo
 	return textResult(text, false), nil, nil
 }
 
+func getDownloadStatusHandler(_ context.Context, _ *mcp.CallToolRequest, in jobStatusInput) (*mcp.CallToolResult, any, error) {
+	text, ok := core.FormatDownloadStatus(in.JobID)
+	if !ok {
+		return textResult(fmt.Sprintf("Unknown job ID: %q", in.JobID), true), nil, nil
+	}
+	return textResult(text, false), nil, nil
+}
+
+func listDownloadsHandler(_ context.Context, _ *mcp.CallToolRequest, _ listDownloadsInput) (*mcp.CallToolResult, any, error) {
+	return textResult(core.FormatDownloadsList(), false), nil, nil
+}
+
 // downloadTranscript is shared by the download_transcript and
 // download_transcript_timed tools, which differ only in withTimestamps —
 // mirrors the TS server's switch statement branching on request.params.name
@@ -277,7 +295,7 @@ func downloadTranscriptTimedHandler(ctx context.Context, _ *mcp.CallToolRequest,
 
 // ── Server construction ──────────────────────────────────────────────────
 
-// NewServer builds the youtube-mcp-cli MCP server with all 12 tools
+// NewServer builds the youtube-mcp-cli MCP server with all 14 tools
 // registered (including the 3 alias pairs, which point at the same
 // handler function as their canonical tool).
 func NewServer(version string) *mcp.Server {
@@ -325,13 +343,23 @@ func NewServer(version string) *mcp.Server {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "download_video",
-		Description: "Downloads a YouTube video (video+audio) to the local filesystem. Returns the file path.",
+		Description: "Starts a background download of a YouTube video (video+audio) to the local filesystem and returns a job ID; use get_download_status to check completion and the final file path.",
 	}, downloadVideoHandler)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "download_audio",
-		Description: "Downloads audio from a YouTube video. Returns the file path.",
+		Description: "Starts a background download of audio from a YouTube video and returns a job ID; use get_download_status to check completion and the final file path.",
 	}, downloadAudioHandler)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_download_status",
+		Description: "Checks the status of a background download started by download_video or download_audio: running, done (with the actual final file path), or failed (with the captured error).",
+	}, getDownloadStatusHandler)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_downloads",
+		Description: "Lists all download jobs known to this server process (ID, kind, video, state).",
+	}, listDownloadsHandler)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "download_transcript",

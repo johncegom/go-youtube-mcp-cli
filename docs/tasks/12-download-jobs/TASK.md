@@ -1,7 +1,8 @@
 # Task 12: Download job tracking (`get_download_status`, `list_downloads`)
 
-**Status:** not started (Definition of Done + Test Plan approved 2026-08-28,
-before implementation, per the task-approval process in `CLAUDE.md`)
+**Status:** done (2026-08-30). Definition of Done + Test Plan approved
+2026-08-28, before implementation, per the task-approval process in
+`CLAUDE.md`.
 
 ## User need
 
@@ -54,22 +55,23 @@ before implementation, per the task-approval process in `CLAUDE.md`)
 
 ## Definition of Done
 
-- [ ] 12.1 Job registry with correct state transitions for success,
+- [x] 12.1 Job registry with correct state transitions for success,
   failure, and unknown-ID lookup (unit-tested with a fake runner — no real
   yt-dlp in unit tests).
-- [ ] 12.2 Actual-final-path resolution finds the real output file when the
+- [x] 12.2 Actual-final-path resolution finds the real output file when the
   extension differs from the prediction (pure function over a file listing,
   unit-tested), and reports the predicted path with a "not found" note if
   no matching file exists.
-- [ ] 12.3 `download_video`/`download_audio` responses include a job ID;
+- [x] 12.3 `download_video`/`download_audio` responses include a job ID;
   existing response text otherwise preserved.
-- [ ] 12.4 `get_download_status` and `list_downloads` registered and
+- [x] 12.4 `get_download_status` and `list_downloads` registered and
   callable; unknown job ID returns `isError: true`, not a crash.
-- [ ] 12.5 Registry history is capped; `-race` clean under concurrent
+- [x] 12.5 Registry history is capped; `-race` clean under concurrent
   register/lookup.
-- [ ] 12.6 `download_video`/`download_audio` descriptions no longer claim
-  to return the file path; deviation logged in `docs/DECISIONS.md`.
-- [ ] 12.7 `go build ./... && go vet ./... && go test ./...` clean;
+- [x] 12.6 `download_video`/`download_audio` descriptions no longer claim
+  to return the file path; deviation logged in `docs/DECISIONS.md`
+  (DECISION-015).
+- [x] 12.7 `go build ./... && go vet ./... && go test ./...` clean;
   `gofmt` clean; no regressions.
 
 ## Test Plan
@@ -92,7 +94,70 @@ before implementation, per the task-approval process in `CLAUDE.md`)
 
 ## Notes / deviations
 
-(fill in during/after implementation)
+- Implemented as planned: `internal/core/jobs.go` (`jobRegistry`,
+  `downloadJob`, `finalPathFromListing`/`resolveActualPath`,
+  `formatJobStatus`/`formatJobLine`, and the exported
+  `FormatDownloadStatus`/`FormatDownloadsList` used by the MCP handlers),
+  wired into `StartVideoDownload`/`StartAudioDownload`
+  (`internal/core/download.go`) and two new MCP tools
+  (`internal/mcpserver/tools.go`).
+- `formatVideoDownloadStarted`/`formatAudioDownloadStarted` gained a
+  `jobID` parameter and now include a `Job ID: <id>` line; existing tests
+  updated in place (this logic has no upstream ground truth to preserve —
+  it's new in this task).
+- Job IDs are `dl-<n>` from a process-wide `atomic.Int64` counter (per the
+  plan); registry capped at 100 jobs, oldest evicted first (same
+  insertion-order-eviction pattern as `transcache.go`'s `transcriptCache`).
+- `get_download_status`/`list_downloads` were kept as thin MCP wrappers
+  around core-owned formatting functions (`FormatDownloadStatus`/
+  `FormatDownloadsList`), matching the existing convention where core owns
+  all user-facing text (e.g. `TranscriptErrorText`).
+- Deviation logged in `docs/DECISIONS.md` DECISION-015: the
+  `download_video`/`download_audio` tool descriptions and response text no
+  longer claim to return the file path.
+- **Manual smoke test: run (2026-08-30).** Built `bin/youtube-mcp.exe` and
+  a throwaway MCP client (`cmd/smoketest`, deleted after the run, not
+  committed — same disposable-client convention as task 7's smoke test)
+  that spawns the real server over stdio via `mcp.CommandTransport` and
+  drives it exactly like a real MCP client would.
+  - Step 1 (`download_audio` on `dQw4w9WgXcQ`): response included
+    `Job ID: dl-1`. ✅
+  - Step 1b (immediate `get_download_status`): `running`. ✅
+  - Step 2 (poll until terminal): transitioned to **`failed`**, not
+    `done` — captured error text
+    `ERROR: unable to download video data: HTTP Error 403: Forbidden`,
+    reproduced independently outside our code by invoking the resolved
+    `yt-dlp` binary directly with the same flags. Root-caused to a
+    pre-existing pinned-dependency issue, **unrelated to this task's
+    code**: logged as **BUG-006** (`docs/BUGS.md`) — the
+    `github.com/lrstanley/go-ytdlp` version in `go.mod` hardcodes
+    yt-dlp `2026.03.17`, which can no longer download this video today,
+    and `EnsureYtDlp` reverts any manually-updated binary back to that
+    pinned version on every fresh process. This step still fully
+    exercised and confirmed the job-tracking behavior that's actually in
+    scope here: `running` → `failed`, with the real yt-dlp error text
+    captured verbatim in `get_download_status`'s output.
+  - Step 3 (`download_video` with well-formed but nonexistent ID
+    `AAAAAAAAAAA`): response included `Job ID: dl-2`. ✅
+  - Step 3b (poll until terminal): `failed`, error text
+    `ERROR: [youtube] AAAAAAAAAAA: This video is unavailable` captured
+    verbatim. ✅ (this was the DoD-intended failure-path check; it passed
+    independent of BUG-006, which only affects real, existing videos.)
+  - Step 4 (`get_download_status` with `jobId: "nope"`): `isError: true`,
+    text `Unknown job ID: "nope"`. ✅
+  - Step 5 (`list_downloads`): listed both `dl-1` and `dl-2` with their
+    correct kind/video/state. ✅
+  - **Update (2026-08-30, same session):** BUG-006 is now fixed (see
+    `docs/BUGS.md`) — `internal/core/ytdlp.go`'s `EnsureYtDlp` now passes
+    `AllowVersionMismatch: true` to `ytdlp.Install`, so it stops reverting
+    an already-working (but version-mismatched) cached yt-dlp binary back
+    to `go-ytdlp`'s stale pinned version. Re-ran the same smoke-test
+    client: `download_audio` on `dQw4w9WgXcQ` now reaches **`done`**, with
+    `get_download_status` reporting a real `ActualPath` confirmed to
+    exist on disk — the previously-blocked success-path check now passes.
+    All other steps re-confirmed unchanged. Task 12's Definition of Done
+    and Test Plan are now fully verified end-to-end, not just by unit
+    test.
 
 ## After finishing
 

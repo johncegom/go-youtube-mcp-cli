@@ -126,6 +126,29 @@ func TestDownloadAudioHandler_InvalidOutputDir(t *testing.T) {
 	}
 }
 
+func TestGetDownloadStatusHandler_UnknownJobID(t *testing.T) {
+	res, _, err := getDownloadStatusHandler(context.Background(), nil, jobStatusInput{JobID: "nope"})
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if !res.IsError {
+		t.Error("IsError = false, want true for an unknown job ID")
+	}
+	if !strings.Contains(contentText(t, res), "Unknown job ID") {
+		t.Errorf("text = %q, want it to mention the unknown job ID", contentText(t, res))
+	}
+}
+
+func TestListDownloadsHandler_Empty(t *testing.T) {
+	res, _, err := listDownloadsHandler(context.Background(), nil, listDownloadsInput{})
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if res.IsError {
+		t.Error("IsError = true, want false for list_downloads")
+	}
+}
+
 func TestDownloadTranscriptHandler_InvalidURL(t *testing.T) {
 	res, _, err := downloadTranscriptHandler(context.Background(), nil, downloadTranscriptInput{URL: "not a url"})
 	if err != nil {
@@ -197,13 +220,14 @@ func connectedClient(t *testing.T) *mcp.ClientSession {
 func TestNewServer_ToolCount(t *testing.T) {
 	cs := connectedClient(t)
 	// 8 canonical tools + 3 aliases (get_transcript_timestamps,
-	// get_video_metadata, search_in_transcript) + get_transcript_range and
-	// download_transcript_timed = 12 — see tools.go's NewServer doc comment.
+	// get_video_metadata, search_in_transcript) + get_transcript_range,
+	// download_transcript_timed, get_download_status, and list_downloads =
+	// 14 — see tools.go's NewServer doc comment.
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
-	if got, want := len(res.Tools), 12; got != want {
+	if got, want := len(res.Tools), 14; got != want {
 		names := make([]string, len(res.Tools))
 		for i, tl := range res.Tools {
 			names[i] = tl.Name

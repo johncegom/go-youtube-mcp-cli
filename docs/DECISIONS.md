@@ -244,3 +244,11 @@ was blocked in the first place.
   task 13's changed search output format) each get their own DECISIONS
   entry at implementation time. Only these five tasks are approved;
   anything further still needs its own scoping pass.
+
+## DECISION-015: `download_video`/`download_audio` tool descriptions rewritten to stop claiming they return the file path
+
+- **Where:** `internal/mcpserver/tools.go`, `NewServer`'s tool registration for `download_video`/`download_audio`
+- **Context:** both descriptions said "Returns the file path," but the handlers only ever returned a *predicted* path before the detached goroutine's download had even started — a real failure, or an extension differing from the prediction (e.g. mkv instead of mp4 when H.264 isn't available), left an LLM agent confidently reporting a file that doesn't exist or isn't where it said. Task 12 added `get_download_status`/`list_downloads` and a `jobRegistry` (`internal/core/jobs.go`) specifically to make the real outcome observable.
+- **Decision:** reworded both descriptions to "Starts a background download ... returns a job ID; use get_download_status to check completion and the final file path," and appended a `Job ID: <id>` line to the existing "Download started" response text (`formatVideoDownloadStarted`/`formatAudioDownloadStarted` in `internal/core/download.go`), rather than restructuring the response into a different shape.
+- **Alternatives considered:** make `download_video`/`download_audio` block until completion so "returns the file path" becomes literally true — rejected because it changes the tool's fire-and-forget contract (large videos would hold an MCP request open for however long yt-dlp takes) and was explicitly out of scope for task 12 (see its `TASK.md` "Plan").
+- **Consequences:** the tool descriptions and response text are now honest about what's known synchronously vs. what requires a follow-up `get_download_status` call. This is a deliberate divergence from upstream's wording, per task 12's `TASK.md`.

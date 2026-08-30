@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 var qualityFormatMap = map[string]string{
@@ -25,12 +26,12 @@ func qualityFormat(quality string) string {
 	return qualityFormatMap["hd720"]
 }
 
-func formatVideoDownloadStarted(title, predictedPath string) string {
-	return fmt.Sprintf("Download started:\nTitle: %s\nThe file will appear at: %s (extension may differ if H.264 is unavailable)\nIt may take a while for long videos.", title, predictedPath)
+func formatVideoDownloadStarted(jobID, title, predictedPath string) string {
+	return fmt.Sprintf("Download started:\nJob ID: %s\nTitle: %s\nThe file will appear at: %s (extension may differ if H.264 is unavailable)\nIt may take a while for long videos.", jobID, title, predictedPath)
 }
 
-func formatAudioDownloadStarted(title, predictedPath string) string {
-	return fmt.Sprintf("Download started:\nTitle: %s\nThe file will appear at: %s\nIt may take a while for long videos.", title, predictedPath)
+func formatAudioDownloadStarted(jobID, title, predictedPath string) string {
+	return fmt.Sprintf("Download started:\nJob ID: %s\nTitle: %s\nThe file will appear at: %s\nIt may take a while for long videos.", jobID, title, predictedPath)
 }
 
 // resolveTitle fetches metadata for a display title and its filename-safe
@@ -70,15 +71,20 @@ func StartVideoDownload(ctx context.Context, videoID, quality, outputDir string)
 		MergeOutputFormat("mp4").
 		Format(qualityFormat(quality))
 
+	jobID := defaultJobRegistry.register(jobKindVideo, videoID, predictedPath, time.Now())
+
 	go func() {
 		if _, err := cmd.Run(context.Background(), videoURL(videoID)); err != nil {
 			msg := err.Error()
 			fmt.Fprintf(os.Stderr, "yt-dlp error: %s\n", msg)
 			LogDownloadError(fmt.Sprintf("download_video %s", videoID), msg)
+			defaultJobRegistry.fail(jobID, msg, time.Now())
+			return
 		}
+		defaultJobRegistry.succeed(jobID, resolveActualPath(outputDir, safeTitle, predictedPath), time.Now())
 	}()
 
-	return formatVideoDownloadStarted(title, predictedPath), nil
+	return formatVideoDownloadStarted(jobID, title, predictedPath), nil
 }
 
 // StartAudioDownload is the audio counterpart to StartVideoDownload.
@@ -100,15 +106,20 @@ func StartAudioDownload(ctx context.Context, videoID, audioFormat, outputDir str
 		AudioFormat(audioFormat).
 		Format("bestaudio/best")
 
+	jobID := defaultJobRegistry.register(jobKindAudio, videoID, predictedPath, time.Now())
+
 	go func() {
 		if _, err := cmd.Run(context.Background(), videoURL(videoID)); err != nil {
 			msg := err.Error()
 			fmt.Fprintf(os.Stderr, "yt-dlp error: %s\n", msg)
 			LogDownloadError(fmt.Sprintf("download_audio %s", videoID), msg)
+			defaultJobRegistry.fail(jobID, msg, time.Now())
+			return
 		}
+		defaultJobRegistry.succeed(jobID, resolveActualPath(outputDir, safeTitle, predictedPath), time.Now())
 	}()
 
-	return formatAudioDownloadStarted(title, predictedPath), nil
+	return formatAudioDownloadStarted(jobID, title, predictedPath), nil
 }
 
 // DownloadVideoBlocking downloads a video and blocks until it finishes,

@@ -294,3 +294,93 @@ Fix now (human decision, this session). Implemented as:
    no longer panics and behaves like `cap == 0`.
 3. Verified: `go build ./...`, `go vet ./...`, `go test ./...`, and `gofmt`
    all clean.
+
+---
+
+## BUG-006: pinned `go-ytdlp` yt-dlp version (2026.03.17) can no longer download `dQw4w9WgXcQ` — every real download fails with `HTTP Error 403: Forbidden`
+
+- **Status:** fixed
+- **Discovered:** task 12 manual smoke test (2026-08-30), running the real MCP server (`bin/youtube-mcp.exe`) end-to-end against `download_audio`/`download_video` for the first time since `EnsureYtDlp`'s `go-ytdlp` dependency was pinned.
+- **Reachability: yes** — this is the real call path (`download_audio`/`download_video` MCP tools → `core.StartAudioDownload`/`StartVideoDownload` → `NewYtDlpCommand().Run(...)`), not a test-only branch. Every real download attempt in this environment today hits it.
+- **Inherited from upstream:** no — this is a Go-port-specific dependency-pinning consequence; the TS original resolves whatever `yt-dlp` version is installed on the system (or via its own npm-postinstall download) rather than a version baked into a Go library at build time.
+
+### Symptom
+
+`download_audio`/`download_video` (and the underlying blocking CLI commands)
+fail immediately with:
+```
+ERROR: unable to download video data: HTTP Error 403: Forbidden
+```
+for a well-known, definitely-still-public video (`dQw4w9WgXcQ`), reproducible both through the MCP server and by invoking the resolved `yt-dlp` binary directly with the same flags outside any of our Go code.
+
+### Root cause
+
+`github.com/lrstanley/go-ytdlp@v1.3.5` (this project's pinned dependency
+version, `go.mod`) hardcodes the yt-dlp release it installs/verifies:
+`constants.gen.go: Version = "2026.03.17"`. `EnsureYtDlp` calls
+`ytdlp.Install(ctx, nil)` unconditionally on every process start, which
+re-verifies (and, if mismatched, re-downloads) exactly that pinned version
+— confirmed experimentally this session: manually running `yt-dlp -U` to
+upgrade the cached binary in place to `2026.08.19` fixed the 403 when
+invoked directly, but the *next* `EnsureYtDlp` call (a fresh
+`youtube-mcp.exe` process) silently reverted the binary back to
+`2026.03.17`, and the 403 came back. yt-dlp `2026.03.17` is now more than
+90 days old (yt-dlp itself warns about this) and can no longer solve
+YouTube's current player-signature/format-serving challenge for at least
+some formats — confirmed the failure persists even with
+`--js-runtimes node` explicitly enabled, so it isn't just the "no JS
+runtime" warning yt-dlp also prints.
+
+### Options
+
+- **Fix now:** bump the `github.com/lrstanley/go-ytdlp` dependency to a
+  version that pins a current yt-dlp release (`go get -u
+  github.com/lrstanley/go-ytdlp && go mod tidy`), verify against a real
+  download end-to-end, and treat future staleness as an ordinary dependency
+  update rather than a code bug — same category of risk as BUG-002.
+- **Workaround only, no fix:** document that operators experiencing 403s
+  should replace the cached binary and additionally patch/fork
+  `go-ytdlp`'s pinned version locally (fragile — `EnsureYtDlp` reverts it
+  on every fresh process per the root cause above).
+- **Leave as-is:** accept that downloads may intermittently/eventually stop
+  working until the dependency is bumped in a future maintenance pass; out
+  of scope for task 12 specifically, whose job is observability
+  (`get_download_status`/`list_downloads`) of whatever outcome yt-dlp
+  produces, not yt-dlp's own success rate.
+
+### Decision
+
+Fix now (human decision, this session). Implemented as:
+1. Bumped `github.com/lrstanley/go-ytdlp` v1.3.5 → v1.3.6 (`go get` +
+   `go mod tidy`) — moves the pinned version forward
+   (`2026.03.17` → `2026.07.04`), but retesting confirmed this alone is
+   **not** a durable fix: `2026.07.04` was *already* stale (still 403;
+   `yt-dlp -U` on that exact resolved binary to `2026.08.19` fixed it
+   immediately). Kept the bump anyway (newer baseline is still better),
+   but it doesn't address the actual mechanism.
+2. `internal/core/ytdlp.go`, `EnsureYtDlp`: changed
+   `ytdlp.Install(ctx, nil)` to
+   `ytdlp.Install(ctx, &ytdlp.InstallOptions{AllowVersionMismatch: true})`.
+   Read through `go-ytdlp`'s `install_ytdlp.go` to confirm the exact
+   semantics: with `AllowVersionMismatch` unset, `Install` re-downloads
+   and overwrites any already-resolved binary (cache or PATH) that
+   doesn't match the pinned `Version` const — this is what was silently
+   reverting a manually-`yt-dlp -U`-updated binary back to the stale
+   pinned version on every process start. With it set, a resolved binary
+   is accepted as-is regardless of version, so an operator's own
+   `yt-dlp -U` (or a newer manual binary drop-in) now sticks across
+   server restarts. A fresh install with no binary present at all still
+   downloads and checksum-verifies the pinned version as before —
+   unaffected.
+3. Verified end-to-end via the same throwaway MCP smoke-test client used
+   for task 12 (`cmd/smoketest`, rebuilt temporarily, deleted after — not
+   committed): with a `2026.08.19` binary already cached (mismatching the
+   pinned `2026.07.04`), `download_audio` on `dQw4w9WgXcQ` now reaches
+   **`done`** via `get_download_status`, with `ActualPath` resolving to a
+   real file confirmed on disk (`ls` after the run) — the one step this
+   bug previously blocked. Re-confirmed the rest of task 12's smoke test
+   still passes unchanged (job IDs present, `download_video` on a
+   nonexistent ID still reaches `failed` with captured error text,
+   unknown job ID still `isError: true`, `list_downloads` still correct).
+4. Verified: `go build ./...`, `go vet ./...`, `go test ./... -race`, and
+   `gofmt` all clean.
