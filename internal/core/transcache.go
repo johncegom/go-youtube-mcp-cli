@@ -33,6 +33,9 @@ type transcriptCache struct {
 }
 
 func newTranscriptCache(ttl time.Duration, cap int, now func() time.Time) *transcriptCache {
+	if cap < 0 {
+		cap = 0
+	}
 	return &transcriptCache{
 		entries: make(map[cacheKey]cacheEntry),
 		ttl:     ttl,

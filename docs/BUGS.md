@@ -250,7 +250,7 @@ Fix now (human decision, this session). Implemented as:
 
 ## BUG-005: `transcriptCache.set` panics on a negative cap
 
-- **Status:** open
+- **Status:** fixed
 - **Discovered:** test-coverage-hardening review of `internal/core/transcache.go` (2026-08-30), while adding cap-boundary unit tests. Not triggered by a runtime failure — `cap` is currently only ever `32` via the single process-wide `defaultCache` (`internal/core/transcache.go:46`), so this isn't reachable through any current code path.
 - **Inherited from upstream:** no — this cache is new in task 11, no TS equivalent.
 
@@ -281,4 +281,16 @@ passed to `newTranscriptCache`.
 
 ### Decision
 
-Pending human decision.
+Fix now (human decision, this session). Implemented as:
+1. `newTranscriptCache` (`internal/core/transcache.go`) now clamps a
+   negative `cap` to `0` before storing it, so `set`'s eviction loop
+   (`len(c.entries) > c.cap`) never runs against an empty `c.order` slice.
+   A negative cap now behaves identically to an explicit cap of `0`
+   ("never actually caches anything"), matching the already-tested
+   `cap == 0` behavior — no change to `set` itself was needed.
+2. `internal/core/transcache_test.go`'s `TestTranscriptCache_NegativeCapPanics`
+   (which pinned the panic) was flipped to
+   `TestTranscriptCache_NegativeCapClampedToZero`, asserting a negative cap
+   no longer panics and behaves like `cap == 0`.
+3. Verified: `go build ./...`, `go vet ./...`, `go test ./...`, and `gofmt`
+   all clean.

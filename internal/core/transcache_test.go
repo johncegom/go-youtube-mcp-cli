@@ -140,23 +140,32 @@ func TestTranscriptCache_ZeroCapNeverCaches(t *testing.T) {
 	}
 }
 
-// TestTranscriptCache_NegativeCapPanics documents docs/BUGS.md BUG-005: with
-// a negative cap, set()'s eviction loop condition (len(c.entries) > c.cap)
-// stays true even at zero entries, so it indexes an empty c.order slice and
-// panics. cap is only ever 32 via defaultCache today, so this isn't
-// reachable through any current public code path — this test pins the gap
-// rather than leaving it silently undiscovered. Flip this assertion once
-// BUG-005 is fixed.
-func TestTranscriptCache_NegativeCapPanics(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected set() to panic with a negative cap (BUG-005); if this no longer panics, BUG-005 has been fixed and this test should be updated")
-		}
-	}()
+// TestTranscriptCache_NegativeCapClampedToZero documents the fix for
+// docs/BUGS.md BUG-005: newTranscriptCache now clamps a negative cap to 0,
+// so set()'s eviction loop never runs against an empty c.order slice, and a
+// negative cap behaves the same as an explicit cap of 0 (nothing is ever
+// cached, no panic).
+func TestTranscriptCache_NegativeCapClampedToZero(t *testing.T) {
 	now := time.Now()
 	c := newTranscriptCache(15*time.Minute, -1, func() time.Time { return now })
-	fetch, _ := countingFetch([]transcriptSegment{{Text: "hi"}}, nil)
-	_, _ = c.getOrFetch(cacheKey{videoID: "v1", language: "en"}, fetch)
+	key := cacheKey{videoID: "v1", language: "en"}
+	fetch, calls := countingFetch([]transcriptSegment{{Text: "hi"}}, nil)
+
+	if _, err := c.getOrFetch(key, fetch); err != nil {
+		t.Fatalf("getOrFetch() error = %v", err)
+	}
+	if _, err := c.getOrFetch(key, fetch); err != nil {
+		t.Fatalf("getOrFetch() error = %v", err)
+	}
+	if n := atomic.LoadInt32(calls); n != 2 {
+		t.Errorf("fetch called %d times, want exactly 2 (negative cap clamped to 0 means nothing is ever cached)", n)
+	}
+	c.mu.Lock()
+	n := len(c.entries)
+	c.mu.Unlock()
+	if n != 0 {
+		t.Errorf("cache has %d entries, want 0 with a negative (clamped) cap", n)
+	}
 }
 
 // TestTranscriptCache_ReAddingExistingKeyDoesNotReorder pins down that
