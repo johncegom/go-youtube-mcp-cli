@@ -34,10 +34,11 @@ func GetDownloadsDir() string {
 
 func pathStartsWith(child, parent string) bool {
 	normalised := filepath.Clean(parent)
+	c, p := child, normalised
 	if runtime.GOOS == "windows" {
-		return strings.HasPrefix(strings.ToLower(child), strings.ToLower(normalised))
+		c, p = strings.ToLower(c), strings.ToLower(p)
 	}
-	return strings.HasPrefix(child, normalised)
+	return c == p || strings.HasPrefix(c, p+string(filepath.Separator))
 }
 
 // ResolveOutputDir resolves rawDir to an absolute path (defaulting to the

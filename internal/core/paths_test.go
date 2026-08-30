@@ -5,14 +5,13 @@ package core
 // use os.UserCacheDir() instead), so ground truth here is the function's
 // own documented contract, not a ported TS behavior.
 //
-// Writing these tests surfaced BUG-004 (docs/BUGS.md): pathStartsWith does
-// a string-prefix compare, not a path-segment compare, so a sibling
-// directory whose name happens to extend the allowed root's last path
+// Writing these tests surfaced BUG-004 (docs/BUGS.md): pathStartsWith used
+// to do a string-prefix compare, not a path-segment compare, so a sibling
+// directory whose name happened to extend the allowed root's last path
 // component (e.g. an allowed root of ".../Temp" and a candidate of
-// ".../TempXYZ/evil") is incorrectly treated as inside the allowed root.
-// TestPathStartsWith_SegmentBoundaryBug pins down this *current* (buggy)
-// behavior rather than silently fixing it, per the project's bug-tracking
-// process — flip its assertion once BUG-004 is fixed.
+// ".../TempXYZ/evil") was incorrectly treated as inside the allowed root.
+// TestPathStartsWith_SegmentBoundary asserts the fixed, segment-bounded
+// behavior (BUG-004, fixed).
 
 import (
 	"os"
@@ -149,19 +148,21 @@ func TestPathStartsWith(t *testing.T) {
 	}
 }
 
-// TestPathStartsWith_SegmentBoundaryBug documents BUG-004 (docs/BUGS.md):
-// pathStartsWith does a raw string-prefix compare, so a sibling directory
-// whose name merely extends the allowed root's final path segment is
-// incorrectly treated as a child of that root. This test asserts the
-// *current* (buggy) behavior — flip it to want=false once BUG-004 is fixed.
-func TestPathStartsWith_SegmentBoundaryBug(t *testing.T) {
+// TestPathStartsWith_SegmentBoundary documents the fix for BUG-004
+// (docs/BUGS.md): pathStartsWith now requires an exact match or a
+// separator-bounded prefix, so a sibling directory whose name merely
+// extends the allowed root's final path segment is correctly rejected.
+func TestPathStartsWith_SegmentBoundary(t *testing.T) {
 	parent := filepath.Clean(os.TempDir())
 	sibling := parent + "XYZ" + string(filepath.Separator) + "evil"
 
-	got := pathStartsWith(sibling, parent)
-	if !got {
-		t.Fatal("expected BUG-004's string-prefix bug to currently misclassify a sibling directory as a child; " +
-			"if this now fails, BUG-004 has been fixed and this assertion should be flipped to false")
+	if pathStartsWith(sibling, parent) {
+		t.Fatalf("expected sibling %q to NOT be classified as inside parent %q (BUG-004)", sibling, parent)
+	}
+
+	child := parent + string(filepath.Separator) + "evil"
+	if !pathStartsWith(child, parent) {
+		t.Fatalf("expected true child %q to be classified as inside parent %q", child, parent)
 	}
 }
 
