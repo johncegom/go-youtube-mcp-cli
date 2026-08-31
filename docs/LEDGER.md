@@ -46,6 +46,7 @@ this index) before pausing.
 | 14 | Phase 2: chapters (`get_chapters`) | [ ] not started | [docs/tasks/14-chapters/TASK.md](tasks/14-chapters/TASK.md) |
 | 15 | Phase 2: playlist listing + cross-video search (depends on 11) | [ ] not started | [docs/tasks/15-playlist-search/TASK.md](tasks/15-playlist-search/TASK.md) |
 | — | Out-of-band: test-coverage hardening (tiers 1-4) | [x] done | [docs/tasks/test-coverage-hardening/TASK.md](tasks/test-coverage-hardening/TASK.md) |
+| — | Out-of-band: `Taskfile.yml` dev-tooling wrapper | [x] done | [docs/tasks/taskfile/TASK.md](tasks/taskfile/TASK.md) |
 
 ## Current status
 
