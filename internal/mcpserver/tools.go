@@ -186,6 +186,25 @@ func getMetadataHandler(ctx context.Context, _ *mcp.CallToolRequest, in metadata
 	return textResult(text, false), nil, nil
 }
 
+func getChaptersHandler(ctx context.Context, _ *mcp.CallToolRequest, in metadataInput) (*mcp.CallToolResult, any, error) {
+	videoID := core.ExtractVideoID(in.URL)
+	if videoID == "" {
+		return invalidURLResult(in.URL), nil, nil
+	}
+	chapters, err := core.FetchChapters(ctx, videoID)
+	if err != nil {
+		return textResult(fmt.Sprintf("Failed to fetch chapters: %s", err.Error()), true), nil, nil
+	}
+	if len(chapters) == 0 {
+		return textResult(fmt.Sprintf("No chapters found for video %s.", videoID), false), nil, nil
+	}
+	lines := make([]string, len(chapters))
+	for i, c := range chapters {
+		lines[i] = fmt.Sprintf("[%s] %s", core.FormatTimestamp(c.StartSecs), c.Title)
+	}
+	return textResult(strings.Join(lines, "\n"), false), nil, nil
+}
+
 func searchTranscriptHandler(ctx context.Context, _ *mcp.CallToolRequest, in searchInput) (*mcp.CallToolResult, any, error) {
 	videoID := core.ExtractVideoID(in.URL)
 	if videoID == "" {
@@ -295,7 +314,7 @@ func downloadTranscriptTimedHandler(ctx context.Context, _ *mcp.CallToolRequest,
 
 // ── Server construction ──────────────────────────────────────────────────
 
-// NewServer builds the youtube-mcp-cli MCP server with all 14 tools
+// NewServer builds the youtube-mcp-cli MCP server with all 15 tools
 // registered (including the 3 alias pairs, which point at the same
 // handler function as their canonical tool).
 func NewServer(version string) *mcp.Server {
@@ -330,6 +349,11 @@ func NewServer(version string) *mcp.Server {
 		Name:        "get_video_metadata",
 		Description: "Fetches video metadata: title, channel, description, publish date, views, duration. (Alias for get_metadata)",
 	}, getMetadataHandler)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_chapters",
+		Description: "Fetches the video's chapters (timestamped table of contents), one '[H:MM:SS] Title' line per chapter, or a message if the video has no chapters.",
+	}, getChaptersHandler)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_transcript",

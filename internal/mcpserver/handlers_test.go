@@ -56,6 +56,16 @@ func TestGetMetadataHandler_InvalidURL(t *testing.T) {
 	}
 }
 
+func TestGetChaptersHandler_InvalidURL(t *testing.T) {
+	res, _, err := getChaptersHandler(context.Background(), nil, metadataInput{URL: "not a url"})
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if !res.IsError {
+		t.Error("IsError = false, want true for an invalid URL")
+	}
+}
+
 func TestSearchTranscriptHandler_InvalidURL(t *testing.T) {
 	res, _, err := searchTranscriptHandler(context.Background(), nil, searchInput{URL: "not a url", Query: "hi"})
 	if err != nil {
@@ -221,13 +231,13 @@ func TestNewServer_ToolCount(t *testing.T) {
 	cs := connectedClient(t)
 	// 8 canonical tools + 3 aliases (get_transcript_timestamps,
 	// get_video_metadata, search_in_transcript) + get_transcript_range,
-	// download_transcript_timed, get_download_status, and list_downloads =
-	// 14 — see tools.go's NewServer doc comment.
+	// download_transcript_timed, get_download_status, list_downloads, and
+	// get_chapters = 15 — see tools.go's NewServer doc comment.
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
-	if got, want := len(res.Tools), 14; got != want {
+	if got, want := len(res.Tools), 15; got != want {
 		names := make([]string, len(res.Tools))
 		for i, tl := range res.Tools {
 			names[i] = tl.Name

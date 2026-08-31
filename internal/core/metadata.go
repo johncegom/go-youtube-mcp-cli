@@ -73,6 +73,14 @@ func keywordsToString(raw json.RawMessage) string {
 // <script type="application/ld+json"> blocks, and finally individual <meta>
 // tags — each only filling in fields the previous tier left empty.
 func FetchVideoMetadata(ctx context.Context, videoID string) (map[string]string, error) {
+	meta, _, err := fetchVideoMetadataAndChapters(ctx, videoID)
+	return meta, err
+}
+
+// fetchVideoMetadataAndChapters does the actual watch-page fetch, shared by
+// FetchVideoMetadata and FetchChapters so a get_chapters call only needs one
+// HTTP request, not two.
+func fetchVideoMetadataAndChapters(ctx context.Context, videoID string) (map[string]string, []chapter, error) {
 	pageURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
 
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -80,31 +88,33 @@ func FetchVideoMetadata(ctx context.Context, videoID string) (map[string]string,
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; YoutubeMCP/1.0)")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("YouTube responded with %d %s", resp.StatusCode, resp.Status)
+		return nil, nil, fmt.Errorf("YouTube responded with %d %s", resp.StatusCode, resp.Status)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	html := string(body)
 
 	meta := map[string]string{}
+	var prChapters []chapter
 
 	if m := ytInitialPlayerRe.FindStringSubmatch(html); m != nil {
 		raw := m[1]
 		if raw == "" {
 			raw = m[2]
 		}
+		prChapters = chaptersFromPlayerResponseJSON([]byte(raw))
 		var pr playerResponse
 		if err := json.Unmarshal([]byte(raw), &pr); err == nil {
 			if mf := pr.PlayerMicroformatRenderer; mf != nil {
@@ -180,7 +190,7 @@ func FetchVideoMetadata(ctx context.Context, videoID string) (map[string]string,
 		}
 	}
 
-	return meta, nil
+	return meta, prChapters, nil
 }
 
 func setIfEmpty(meta map[string]string, key, value string) {

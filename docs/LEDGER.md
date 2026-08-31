@@ -43,7 +43,7 @@ this index) before pausing.
 | 11 | Phase 2: transcript cache + `get_transcript_range` | [x] done | [docs/tasks/11-transcript-cache/TASK.md](tasks/11-transcript-cache/TASK.md) |
 | 12 | Phase 2: download job tracking (`get_download_status`, `list_downloads`) | [x] done | [docs/tasks/12-download-jobs/TASK.md](tasks/12-download-jobs/TASK.md) |
 | 13 | Phase 2: context-aware transcript search | [ ] not started | [docs/tasks/13-context-search/TASK.md](tasks/13-context-search/TASK.md) |
-| 14 | Phase 2: chapters (`get_chapters`) | [ ] not started | [docs/tasks/14-chapters/TASK.md](tasks/14-chapters/TASK.md) |
+| 14 | Phase 2: chapters (`get_chapters`) | [x] done (out of order, before 13) | [docs/tasks/14-chapters/TASK.md](tasks/14-chapters/TASK.md) |
 | 15 | Phase 2: playlist listing + cross-video search (depends on 11) | [ ] not started | [docs/tasks/15-playlist-search/TASK.md](tasks/15-playlist-search/TASK.md) |
 | — | Out-of-band: test-coverage hardening (tiers 1-4) | [x] done | [docs/tasks/test-coverage-hardening/TASK.md](tasks/test-coverage-hardening/TASK.md) |
 | — | Out-of-band: `Taskfile.yml` dev-tooling wrapper | [x] done | [docs/tasks/taskfile/TASK.md](tasks/taskfile/TASK.md) |
@@ -98,8 +98,17 @@ DECISION-015). Its manual smoke test surfaced and led to fixing BUG-006 (a
 `go-ytdlp` pinned-version staleness bug reverting locally-updated yt-dlp
 binaries — see `docs/BUGS.md`); the smoke test has since been fully
 re-run end-to-end including the success path, all green — see its
-`TASK.md` "Notes / deviations" for the full transcript. Tasks 13–15 have
-not been started. The pause-and-ask rule still applies between tasks. Related: BUG-003 (dead Node-ism branches in
+`TASK.md` "Notes / deviations" for the full transcript. Task 14 is done
+(2026-08-31) — see `docs/tasks/14-chapters/TASK.md` for full detail: a
+pure `parseChapters` (`internal/core/chapters.go`) extracting chapters from
+a video description, a player-response JSON fallback tier
+(`chaptersFromPlayerResponseJSON`), and the new `get_chapters` MCP tool.
+Implemented **out of the documented order** — before task 13, with
+explicit human approval, since 14 has no code dependency on 13. Manual
+smoke test against a real 35-chapter video and a real unchaptered video,
+both correct (see `TASK.md` "Notes / deviations"). Tasks 13 and 15 have
+not been started. The pause-and-ask rule still applies between tasks.
+Related: BUG-003 (dead Node-ism branches in
 `TranscriptErrorText`) is fixed and merged to `main` (PR #10, commit
 `be6c93d`) — see `docs/BUGS.md` for the full writeup.
 
@@ -125,7 +134,8 @@ future task.
 1. Read this index first (not the individual task files, unless you need one).
 2. Run `go build ./... && go vet ./... && go test ./...` to confirm the current state still holds.
 3. Skim `docs/RETRO.md` for any still-relevant advice before starting new work.
-4. Next task: **13** (context-aware transcript search) — its DoD + Test
-   Plan in `docs/tasks/13-context-search/TASK.md` should be (re-)reviewed
-   before implementation starts.
+4. Next task: **13** (context-aware transcript search) or **15** (playlist
+   listing + cross-video search, depends on 11 which is done) — 14 is now
+   done, out of order. Whichever is picked, its DoD + Test Plan should be
+   (re-)reviewed before implementation starts.
 5. After finishing a task: update **that task's `TASK.md`** with full detail first, then update this index's status column/checkbox for it, then pause and ask the human before starting the next task. If the task involved a deliberate design/scope tradeoff, log it in `docs/DECISIONS.md` too; if it surfaced a way-of-working lesson that generalizes beyond that one task, log it in `docs/RETRO.md`.

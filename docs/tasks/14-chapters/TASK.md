@@ -1,7 +1,9 @@
 # Task 14: Chapters (`get_chapters`)
 
-**Status:** not started (Definition of Done + Test Plan approved 2026-08-28,
-before implementation, per the task-approval process in `CLAUDE.md`)
+**Status:** done (2026-08-31). Definition of Done + Test Plan approved
+2026-08-28, before implementation, per the task-approval process in
+`CLAUDE.md`. Implemented out of documented order (before task 13 — see
+"Notes / deviations").
 
 ## User need
 
@@ -45,21 +47,21 @@ navigate a video by topic without reading the whole transcript.
 
 ## Definition of Done
 
-- [ ] 14.1 `parseChapters` accepts `M:SS`/`MM:SS`/`H:MM:SS`, both
+- [x] 14.1 `parseChapters` accepts `M:SS`/`MM:SS`/`H:MM:SS`, both
   "timestamp then title" and "title then timestamp" line orders.
-- [ ] 14.2 Validity rules enforced: must start at `0:00`, ≥ 3 entries,
+- [x] 14.2 Validity rules enforced: must start at `0:00`, ≥ 3 entries,
   strictly ascending — a description with scattered mid-text timestamp
   mentions (e.g. "at 2:30 he says...") yields **no** chapters.
-- [ ] 14.3 Titles trimmed of leading/trailing separators (`-`, `–`, `:`,
+- [x] 14.3 Titles trimmed of leading/trailing separators (`-`, `–`, `:`,
   whitespace); empty-title lines skipped.
-- [ ] 14.4 Player-response fallback tier used only when the description
+- [x] 14.4 Player-response fallback tier used only when the description
   tier yields nothing; malformed JSON in that tier degrades to
   "no chapters", never an error.
-- [ ] 14.5 `get_chapters` registered and callable; chaptered video returns
+- [x] 14.5 `get_chapters` registered and callable; chaptered video returns
   timed lines; unchaptered video returns the no-chapters message with
   `isError: false`; invalid URL returns the standard invalid-URL
   `isError` result.
-- [ ] 14.6 `go build ./... && go vet ./... && go test ./...` clean;
+- [x] 14.6 `go build ./... && go vet ./... && go test ./...` clean;
   `gofmt` clean; no regressions.
 
 ## Test Plan
@@ -85,7 +87,55 @@ navigate a video by topic without reading the whole transcript.
 
 ## Notes / deviations
 
-(fill in during/after implementation)
+- **Order deviation:** implemented before task 13 (context-aware transcript
+  search), out of the documented 11→12→13→14→15 order. Explicitly approved
+  by the human — task 14 has no code dependency on 13, only on task 11's
+  `core.ParseTimestamp`.
+- **Architecture:** `FetchVideoMetadata` (`internal/core/metadata.go`) had
+  no seam exposing the raw `ytInitialPlayerResponse` JSON outside the
+  function, and no httptest/mock fixture for it exists anywhere in this
+  codebase (confirmed by grep — `metadata_test.go` only tests pure
+  helpers). Rather than adding a second HTTP fetch or an httptest-based
+  test path that doesn't match this codebase's conventions, the function's
+  body was renamed to unexported `fetchVideoMetadataAndChapters` (returns
+  `(map[string]string, []chapter, error)`), with `FetchVideoMetadata` now a
+  2-line wrapper preserving its exact original signature — zero existing
+  callers changed. The new `internal/core/chapters.go` file holds a *pure*
+  `chaptersFromPlayerResponseJSON(raw []byte) []chapter` for the
+  player-response tier, directly unit-tested with JSON literal fixtures
+  (no mocking needed), and `FetchChapters` (the new public entry point)
+  does a single HTTP fetch shared between the description and
+  player-response tiers.
+- **Real-world format handling:** initial `parseChapters` implementation
+  required the timestamp to be a literal line prefix or suffix, which
+  rejected a real chaptered video's actual format
+  (`⌨️ (0:00) Introduction` — timestamp wrapped in decoration). Caught by
+  the manual smoke test (see below), not by the synthetic unit fixtures.
+  Fixed by switching the rule to "real title text (a letter or digit) on
+  exactly one side of the timestamp token" via a
+  `[\p{L}\p{N}]`-based check, rather than requiring literal string-index
+  prefix/suffix — this still correctly rejects mid-sentence mentions like
+  "at 2:30 he says..." (both sides have real text) while accepting
+  decorated real-world formats. `trimTitle`'s cutset was widened to also
+  strip `()[]` and em dash.
+- **Player-response fallback tier's validity rule:** `chaptersFromPlayerResponseJSON`
+  deliberately does *not* re-apply `parseChapters`' validity gate (≥3,
+  starts at 0, strictly ascending) — it trusts YouTube's own structured
+  `chapters` array as-is, unlike the free-text description tier which must
+  guard against incidental timestamp mentions. Documented in code and in
+  `TestChaptersFromPlayerResponseJSON_TooFewIgnoresValidityGate`.
+- **Manual smoke test** (2026-08-31): `rfscVS0vtbw` ("Learn Python - Full
+  Course for Beginners", freeCodeCamp) → 35 chapters, output verified by
+  eye against the video's actual description (exact timestamp/title
+  matches, e.g. `[00:00] Introduction` through
+  `[4:20:43] Python Interpreter`). `dQw4w9WgXcQ` (Rick Astley — Never
+  Gonna Give You Up, no chapters) → "No chapters found for video
+  dQw4w9WgXcQ.", `isError: false`. Run via a throwaway test calling
+  `core.FetchChapters` directly (not a full MCP client round-trip, since
+  that would need real network access through the MCP stdio transport —
+  the direct call exercises the same real HTTP-fetch + parsing code path
+  the MCP handler calls).
+- No CLI subcommand added, per the approved scope.
 
 ## After finishing
 

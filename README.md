@@ -99,6 +99,7 @@ canonical one — both call the same handler):
 | `get_transcript_range` | Transcript segments between a start/end timestamp only |
 | `search_transcript` (alias `search_in_transcript`) | Find a keyword/phrase in the transcript, with timestamps |
 | `get_metadata` (alias `get_video_metadata`) | Title, channel, description, publish date, views, duration |
+| `get_chapters` | The video's chapters (timestamped table of contents), or a message if it has none |
 | `download_video` | Start a background video download; returns a job ID |
 | `download_audio` | Start a background audio-only download; returns a job ID |
 | `get_download_status` | Check a job ID: running / done (with the real file path) / failed (with the error) |
