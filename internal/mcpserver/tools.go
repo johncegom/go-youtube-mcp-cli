@@ -26,9 +26,10 @@ type metadataInput struct {
 }
 
 type searchInput struct {
-	URL      string `json:"url" jsonschema:"The full YouTube URL or video ID"`
-	Query    string `json:"query" jsonschema:"The keyword or phrase to search for"`
-	Language string `json:"language,omitempty" jsonschema:"Optional. Language code. Defaults to 'en'."`
+	URL      string   `json:"url" jsonschema:"The full YouTube URL or video ID"`
+	Query    string   `json:"query" jsonschema:"The keyword or phrase to search for"`
+	Language string   `json:"language,omitempty" jsonschema:"Optional. Language code. Defaults to 'en'."`
+	Context  *float64 `json:"context,omitempty" jsonschema:"Optional. Seconds of context to include around each match, default 15. Pass 0 to return only the matched segment(s), no surrounding context."`
 }
 
 type rangeInput struct {
@@ -213,7 +214,11 @@ func searchTranscriptHandler(ctx context.Context, _ *mcp.CallToolRequest, in sea
 	if strings.TrimSpace(in.Query) == "" {
 		return textResult("Please provide a non-empty search query.", true), nil, nil
 	}
-	text, err := core.SearchInTranscript(ctx, videoID, in.Query, in.Language)
+	contextSecs := 15.0
+	if in.Context != nil {
+		contextSecs = *in.Context
+	}
+	text, err := core.SearchInTranscript(ctx, videoID, in.Query, in.Language, contextSecs)
 	if err != nil {
 		return textResult(core.TranscriptErrorText(videoID, err), true), nil, nil
 	}
@@ -357,12 +362,12 @@ func NewServer(version string) *mcp.Server {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_transcript",
-		Description: "Searches for a keyword or phrase in the transcript and returns matching segments with timestamps.",
+		Description: "Searches for a keyword or phrase in the transcript, matching across segment boundaries. Returns each match's surrounding context (± 'context' seconds, default 15; pass 0 for matched segments only) as timed-line blocks separated by '---', with the total distinct match count.",
 	}, searchTranscriptHandler)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_in_transcript",
-		Description: "Searches for a keyword or phrase in the transcript and returns matching segments with timestamps. (Alias for search_transcript)",
+		Description: "Searches for a keyword or phrase in the transcript, matching across segment boundaries. Returns each match's surrounding context (± 'context' seconds, default 15; pass 0 for matched segments only) as timed-line blocks separated by '---', with the total distinct match count. (Alias for search_transcript)",
 	}, searchTranscriptHandler)
 
 	mcp.AddTool(server, &mcp.Tool{
