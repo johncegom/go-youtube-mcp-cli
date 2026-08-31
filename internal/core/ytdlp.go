@@ -117,8 +117,16 @@ func EnsureYtDlp(ctx context.Context) error {
 
 // NewYtDlpCommand returns a yt-dlp command builder with the ffmpeg location
 // pre-configured when available. Callers must call EnsureYtDlp first.
+//
+// ForceIPv4 is set unconditionally: on a machine/network whose IPv6 route
+// is down (but whose IPv6 addresses are still configured, so dual-stack
+// resolution still tries it), every yt-dlp call hangs at "Downloading
+// webpage" until this project's own request timeout kills it — see
+// docs/BUGS.md BUG-007. This is a one-sided fix (it doesn't help, and
+// slightly hurts, on a network where IPv6 is the healthy path and IPv4 is
+// degraded), but no such report exists for this project's user base.
 func NewYtDlpCommand() *ytdlp.Command {
-	cmd := ytdlp.New()
+	cmd := ytdlp.New().ForceIPv4()
 	if ffmpegPath != "" {
 		cmd = cmd.FFmpegLocation(ffmpegPath)
 	}

@@ -384,3 +384,129 @@ Fix now (human decision, this session). Implemented as:
    unknown job ID still `isError: true`, `list_downloads` still correct).
 4. Verified: `go build ./...`, `go vet ./...`, `go test ./... -race`, and
    `gofmt` all clean.
+
+---
+
+## BUG-007: transcript/download `yt-dlp` calls hang past the 30s timeout when the machine's IPv6 connectivity is down
+
+- **Status:** fixed
+- **Discovered:** investigating a user-reported `"Transcript fetch timed
+  out for video t1xKo4spo3s. Please try again."` error (2026-08-30/31).
+- **Reachability: yes** — the real call path (`get_transcript` and every
+  other transcript tool → `core.GetTranscriptText`/etc. →
+  `fetchSegmentsFromYtDlp`, `internal/core/transcript.go:231-273`), not a
+  test-only branch. On the affected machine this reproduces
+  **deterministically, for every video**, not just the reported one.
+- **Inherited from upstream:** no — this is about this machine's/network's
+  routing to YouTube, not project logic. But the *timeout* itself
+  (`context.WithTimeout(ctx, 30*time.Second)`, `transcript.go:242`) and the
+  resulting user-facing message are this project's code.
+
+### Symptom
+
+`get_transcript`/`get_transcript_timed`/`search_transcript`/
+`download_transcript`/etc. reliably return:
+```
+Transcript fetch timed out for video <id>. Please try again.
+```
+"Please try again" is misleading here: retrying fails identically every
+time on an affected machine, because the underlying cause isn't transient.
+
+### Root cause
+
+Confirmed directly, outside any of this project's code, and then narrowed
+further after a fair question ("have we ever actually succeeded over
+IPv6?") exposed that the first pass at this root cause was too narrow:
+
+1. `yt-dlp --write-auto-sub --write-sub --sub-langs en --sub-format vtt
+   <url>` hangs indefinitely at its very first step, `"Downloading
+   webpage"` — tested to 90+ seconds with zero progress, for **both** the
+   reported video (`t1xKo4spo3s`) and a known-good one (`dQw4w9WgXcQ`), so
+   it's not video-specific.
+2. A plain, unforced `curl` GET to the same watch-page URL succeeded in
+   ~1.2s — but forcing that same `curl` call to use IPv6 explicitly
+   (`curl -6`) reproduced the same hang/timeout (`http_code=000`, 8s
+   `--max-time` exceeded). Explicitly forcing IPv4 (`curl -4`, `yt-dlp
+   -4`) succeeded instantly every time, for both `yt-dlp` and `curl`.
+3. **Crucially, this isn't YouTube-specific at all**: `curl -6` to
+   `cloudflare.com` and `www.google.com` — two unrelated, definitely-up
+   hosts — also both hung to the full 8s `--max-time` with `http_code=000`.
+   So this machine's IPv6 path is down for *any* destination right now,
+   not something particular to YouTube or `yt-dlp`.
+4. The machine does have real global-unicast IPv6 addresses configured
+   (`Get-NetIPAddress -AddressFamily IPv6`, RouterAdvertisement/DHCP-
+   assigned `2405:...` prefixes, not just link-local) — so IPv6 is
+   configured and was presumably reachable at some point, but is not
+   actually routing out to the internet right now (an ISP/router-level
+   IPv6 issue, upstream of anything this project or `yt-dlp` controls).
+5. This also corrects the original framing: earlier `yt-dlp` calls
+   *during this same session* (while diagnosing BUG-006) succeeded
+   without ever forcing an IP version. Given point 3, there is no actual
+   evidence any of those calls used IPv6 — Windows' dual-stack address
+   selection can silently prefer/race IPv4 first, so those successes were
+   most likely IPv4 the whole time, and IPv6 may well have been down
+   throughout. "Present-but-intermittently-dead" was an overclaim; the
+   honest statement is: IPv6 is confirmed down right now, and there is no
+   confirmed instance of it ever working in this session.
+6. This project's own 30s `context.WithTimeout` (`transcript.go:242`) is
+   what turns the hang into an error at all instead of hanging the whole
+   MCP/CLI call forever — a reasonable safety net on its own, but the
+   resulting message ("Please try again") doesn't distinguish "transient,
+   try again" from "this machine's IPv6 is down, retrying won't help until
+   that's fixed or IPv4 is forced."
+
+### Options
+
+- **Fix now:** add `.ForceIPv4()` to `NewYtDlpCommand()`
+  (`internal/core/ytdlp.go`) — confirmed available in the pinned
+  `go-ytdlp` version (`Command.ForceIPv4()`, maps to `-4`). This is the
+  shared builder used by every `yt-dlp` invocation in the codebase
+  (transcript fetch and both download paths), so one change covers all of
+  them. Forcing IPv4 is a widely-used, low-risk `yt-dlp` community
+  workaround for exactly this class of hang; the main tradeoff is it
+  removes IPv6 as an option entirely, including on networks where IPv6 is
+  the *working* path and IPv4 is what's degraded (the inverse case) — no
+  evidence either way for this project's actual user base.
+- **Narrower fix:** don't force IPv4 globally; instead retry once with
+  `-4` specifically after a timeout, so IPv6-healthy networks are
+  unaffected. More code (a retry path + a way to thread a "retry with
+  forced IPv4" flag through `fetchSegmentsFromYtDlp` and the download
+  paths) for a benefit that only matters on the subset of networks where
+  IPv6 is broken.
+- **Message-only fix, no behavior change:** reword the timeout message to
+  not imply retrying will likely help, and hint at the IPv6 possibility
+  (e.g. mention `-4`/force-IPv4 as a thing to check) — cheaper, but leaves
+  the actual hang (and the CLI/MCP call blocking for the full 30s each
+  time) unfixed.
+- **Leave as-is:** this may be specific to unusual network configurations;
+  wait for more reports before changing shared command-building behavior
+  for everyone.
+
+### Decision
+
+Fix now — force IPv4 globally (human decision, this session). Implemented
+as:
+1. `NewYtDlpCommand()` (`internal/core/ytdlp.go`) now chains `.ForceIPv4()`
+   unconditionally onto the returned `*ytdlp.Command`, alongside the
+   existing `FFmpegLocation` wiring. This is the single shared builder used
+   by every `yt-dlp` invocation in the codebase (`fetchSegmentsFromYtDlp`
+   in `transcript.go`, and both download paths in `download.go`), so one
+   change covers all of them, matching how the fix was scoped in the
+   Options above.
+2. No retry/threading logic was added (the narrower "retry once with -4"
+   option was considered and explicitly not chosen): forcing IPv4
+   unconditionally accepts the one-sided tradeoff already noted in
+   Options — it removes IPv6 as an option entirely, including on a
+   hypothetical network where IPv6 is the healthy path and IPv4 is
+   degraded. No such report exists for this project's user base.
+3. Verified end-to-end on the affected machine (IPv6 confirmed down per
+   Root cause above): `go run ./cmd/youtube-cli transcript t1xKo4spo3s
+   --timestamps` (the originally user-reported failing video) now returns
+   the transcript immediately instead of hanging to the 30s timeout.
+   Re-checked `dQw4w9WgXcQ` (BUG-007's other repro video) — also succeeds
+   immediately.
+4. Verified: `go build ./...`, `go vet ./...`, `go test ./...`, and
+   `gofmt` all clean. No unit test added — this is a one-line CLI-flag
+   change on an I/O-bound builder with no existing unit tests for its flag
+   wiring, consistent with project convention of leaving `yt-dlp`
+   invocation behavior to manual/smoke verification.
