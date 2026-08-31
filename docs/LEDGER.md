@@ -42,7 +42,7 @@ this index) before pausing.
 | — | Out-of-band: repo made public, MIT-licensed, branch protection enabled | [x] done | see `docs/DECISIONS.md` DECISION-012 |
 | 11 | Phase 2: transcript cache + `get_transcript_range` | [x] done | [docs/tasks/11-transcript-cache/TASK.md](tasks/11-transcript-cache/TASK.md) |
 | 12 | Phase 2: download job tracking (`get_download_status`, `list_downloads`) | [x] done | [docs/tasks/12-download-jobs/TASK.md](tasks/12-download-jobs/TASK.md) |
-| 13 | Phase 2: context-aware transcript search | [ ] not started | [docs/tasks/13-context-search/TASK.md](tasks/13-context-search/TASK.md) |
+| 13 | Phase 2: context-aware transcript search | [x] done | [docs/tasks/13-context-search/TASK.md](tasks/13-context-search/TASK.md) |
 | 14 | Phase 2: chapters (`get_chapters`) | [x] done (out of order, before 13) | [docs/tasks/14-chapters/TASK.md](tasks/14-chapters/TASK.md) |
 | 15 | Phase 2: playlist listing + cross-video search (depends on 11) | [ ] not started | [docs/tasks/15-playlist-search/TASK.md](tasks/15-playlist-search/TASK.md) |
 | — | Out-of-band: test-coverage hardening (tiers 1-4) | [x] done | [docs/tasks/test-coverage-hardening/TASK.md](tasks/test-coverage-hardening/TASK.md) |
@@ -106,8 +106,20 @@ a video description, a player-response JSON fallback tier
 Implemented **out of the documented order** — before task 13, with
 explicit human approval, since 14 has no code dependency on 13. Manual
 smoke test against a real 35-chapter video and a real unchaptered video,
-both correct (see `TASK.md` "Notes / deviations"). Tasks 13 and 15 have
-not been started. The pause-and-ask rule still applies between tasks.
+both correct (see `TASK.md` "Notes / deviations"). Task 13 is done
+(2026-09-01) — see `docs/tasks/13-context-search/TASK.md` for full detail:
+search now matches the merged transcript text as one stream
+(`internal/core/search.go`'s `searchSegmentsWithContext`), so phrases
+spanning two VTT segments are found (previously a silent false negative),
+expands each match to a ±`context`-second window (default 15; `0` =
+matched segments only), merges overlapping windows into blocks separated
+by `---`. Upgrades `search_transcript`/`search_in_transcript` and CLI
+`search --context` in place — no new tool. Output-format deviation from
+upstream logged as `docs/DECISIONS.md` DECISION-018, per DECISION-013's
+anticipation. Manual smoke test against a real video found a genuine
+cross-boundary match the old search would have missed (see `TASK.md`
+"Notes / deviations"). Task 15 has not been started. The pause-and-ask
+rule still applies between tasks.
 Related: BUG-003 (dead Node-ism branches in
 `TranscriptErrorText`) is fixed and merged to `main` (PR #10, commit
 `be6c93d`) — see `docs/BUGS.md` for the full writeup.
@@ -134,8 +146,8 @@ future task.
 1. Read this index first (not the individual task files, unless you need one).
 2. Run `go build ./... && go vet ./... && go test ./...` to confirm the current state still holds.
 3. Skim `docs/RETRO.md` for any still-relevant advice before starting new work.
-4. Next task: **13** (context-aware transcript search) or **15** (playlist
-   listing + cross-video search, depends on 11 which is done) — 14 is now
-   done, out of order. Whichever is picked, its DoD + Test Plan should be
-   (re-)reviewed before implementation starts.
+4. Next task: **15** (playlist listing + cross-video search, depends on 11
+   which is done) — 13 and 14 are both done, out of the original strict
+   order for 14. Its DoD + Test Plan should be (re-)reviewed before
+   implementation starts.
 5. After finishing a task: update **that task's `TASK.md`** with full detail first, then update this index's status column/checkbox for it, then pause and ask the human before starting the next task. If the task involved a deliberate design/scope tradeoff, log it in `docs/DECISIONS.md` too; if it surfaced a way-of-working lesson that generalizes beyond that one task, log it in `docs/RETRO.md`.

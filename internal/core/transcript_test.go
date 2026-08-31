@@ -108,29 +108,6 @@ func TestTranscriptTimed(t *testing.T) {
 	}
 }
 
-func TestFormatSearchResult_Found(t *testing.T) {
-	matches := searchSegments(sampleSegments, "text")
-	want := "Found 1 match(es) for \"text\":\n\n[01:05] Multi line text"
-	if got := formatSearchResult("abc123", "text", matches); got != want {
-		t.Errorf("formatSearchResult() = %q, want %q", got, want)
-	}
-}
-
-func TestFormatSearchResult_NoMatches(t *testing.T) {
-	matches := searchSegments(sampleSegments, "zzz")
-	want := `No matches found for "zzz" in video abc123.`
-	if got := formatSearchResult("abc123", "zzz", matches); got != want {
-		t.Errorf("formatSearchResult() = %q, want %q", got, want)
-	}
-}
-
-func TestSearchSegments_CaseInsensitive(t *testing.T) {
-	matches := searchSegments(sampleSegments, "HELLO")
-	if len(matches) != 1 || matches[0].Text != "Hello world" {
-		t.Errorf("searchSegments(case-insensitive) = %+v", matches)
-	}
-}
-
 // f64 returns a pointer to v, for building *float64 range bounds in tests.
 func f64(v float64) *float64 { return &v }
 

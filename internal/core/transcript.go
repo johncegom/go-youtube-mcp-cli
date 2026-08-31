@@ -128,28 +128,6 @@ func filterSegmentsByRange(segments []transcriptSegment, startMs, endMs *float64
 	return out
 }
 
-func searchSegments(segments []transcriptSegment, query string) []transcriptSegment {
-	lowerQuery := strings.ToLower(query)
-	var matches []transcriptSegment
-	for _, s := range segments {
-		if strings.Contains(strings.ToLower(s.Text), lowerQuery) {
-			matches = append(matches, s)
-		}
-	}
-	return matches
-}
-
-func formatSearchResult(videoID, query string, matches []transcriptSegment) string {
-	if len(matches) == 0 {
-		return fmt.Sprintf("No matches found for %q in video %s.", query, videoID)
-	}
-	lines := make([]string, len(matches))
-	for i, s := range matches {
-		lines[i] = fmt.Sprintf("[%s] %s", FormatTimestamp(s.Offset/1000), s.Text)
-	}
-	return fmt.Sprintf("Found %d match(es) for %q:\n\n%s", len(matches), query, strings.Join(lines, "\n"))
-}
-
 // TranscriptErrorText turns a raw fetch error into a user-facing message,
 // classifying (timeout / missing captions / network error / generic).
 //
@@ -347,12 +325,20 @@ func GetTranscriptRange(ctx context.Context, videoID, language string, startSec,
 
 // SearchInTranscript searches for a keyword/phrase in the transcript and
 // returns matching lines with timestamps, or a "no matches" message.
-func SearchInTranscript(ctx context.Context, videoID, query, language string) (string, error) {
+// SearchInTranscript searches for a keyword or phrase in the transcript
+// (matching across segment boundaries) and returns each match's
+// ±contextSecs window as a block of timed lines, or a "no matches"
+// message. contextSecs < 0 is clamped to 0 (matched segments only).
+func SearchInTranscript(ctx context.Context, videoID, query, language string, contextSecs float64) (string, error) {
+	if contextSecs < 0 {
+		contextSecs = 0
+	}
 	segments, err := fetchSegments(ctx, videoID, normalizeLanguage(language))
 	if err != nil {
 		return "", err
 	}
-	return formatSearchResult(videoID, query, searchSegments(segments, query)), nil
+	matchCount, blocks := searchSegmentsWithContext(segments, query, contextSecs)
+	return formatSearchResultWithContext(videoID, query, matchCount, blocks), nil
 }
 
 // SaveTranscriptFile fetches the transcript and metadata concurrently and

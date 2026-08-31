@@ -1,7 +1,8 @@
 # Task 13: Context-aware transcript search
 
-**Status:** not started (Definition of Done + Test Plan approved 2026-08-28,
-before implementation, per the task-approval process in `CLAUDE.md`)
+**Status:** done (2026-09-01). Definition of Done + Test Plan approved
+2026-08-28, before implementation, per the task-approval process in
+`CLAUDE.md`.
 
 ## User need
 
@@ -51,24 +52,24 @@ Pure-logic task (no new I/O) — the most TDD-friendly of Phase 2.
 
 ## Definition of Done
 
-- [ ] 13.1 A query phrase spanning two adjacent segments is found
+- [x] 13.1 A query phrase spanning two adjacent segments is found
   (demonstrated by a test that fails against the old `searchSegments`
   behavior — red first).
-- [ ] 13.2 Existing single-segment matches still found; case-insensitivity
+- [x] 13.2 Existing single-segment matches still found; case-insensitivity
   preserved; "no matches" message preserved for zero hits.
-- [ ] 13.3 Context windows correct at transcript start/end boundaries (no
+- [x] 13.3 Context windows correct at transcript start/end boundaries (no
   panic, no phantom segments).
-- [ ] 13.4 Overlapping/adjacent match windows merge into one block; match
+- [x] 13.4 Overlapping/adjacent match windows merge into one block; match
   *count* still reflects distinct matches, not blocks.
-- [ ] 13.5 `context: 0` returns matched segments only (old-style behavior,
+- [x] 13.5 `context: 0` returns matched segments only (old-style behavior,
   minus the false negatives).
-- [ ] 13.6 `search_transcript` + alias accept the optional `context` field;
+- [x] 13.6 `search_transcript` + alias accept the optional `context` field;
   alias output remains byte-identical to canonical for identical input.
-- [ ] 13.7 CLI `search --context` works and defaults sensibly.
-- [ ] 13.8 Output format documented (in the tool description and this
+- [x] 13.7 CLI `search --context` works and defaults sensibly.
+- [x] 13.8 Output format documented (in the tool description and this
   file); deviation from upstream's search output logged in
   `docs/DECISIONS.md`.
-- [ ] 13.9 `go build ./... && go vet ./... && go test ./...` clean;
+- [x] 13.9 `go build ./... && go vet ./... && go test ./...` clean;
   `gofmt` clean; existing search tests updated only where the *spec*
   changed (each such change justified here, not silently rewritten).
 
@@ -95,7 +96,48 @@ Pure-logic task (no new I/O) — the most TDD-friendly of Phase 2.
 
 ## Notes / deviations
 
-(fill in during/after implementation)
+- **New file:** `internal/core/search.go` holds `buildMergedStream`,
+  `segmentForCharIndex`, `searchSegmentsWithContext`,
+  `formatSearchResultWithContext` — kept separate from
+  `transcript.go` rather than added inline, since it's a distinct
+  self-contained algorithm with its own tests.
+- **Dead code removed:** the old `searchSegments`/`formatSearchResult`
+  (`internal/core/transcript.go`) and their direct tests
+  (`TestFormatSearchResult_Found`/`_NoMatches`,
+  `TestSearchSegments_CaseInsensitive` in `transcript_test.go`) were
+  deleted once `SearchInTranscript` was rewired to the new functions —
+  per this repo's no-orphaned-dead-code norm. Superseded one-for-one by
+  the new tests in `internal/core/search_test.go`.
+- **Reused `filterSegmentsByRange` (task 11) as-is** for populating each
+  merged block's segments — no changes needed, its existing
+  offset-only-inclusive-bound contract (already relied on by
+  `get_transcript_range`) is exactly right for this too.
+- **Real-world observation (not a bug):** the manual smoke test showed
+  that even with `context: 0`, a block can include one extra segment
+  beyond the two the match spans. Root cause: YouTube's real
+  auto-generated captions have overlapping display durations — segment
+  N's `Offset+Duration` commonly extends past segment N+1's `Offset` —
+  so `filterSegmentsByRange`'s offset-inclusion rule legitimately pulls
+  in that next segment too. This is the same behavior `get_transcript_range`
+  already has on the same data (task 11), not something task 13
+  introduced; not a DoD violation, since the block still only contains
+  segments genuinely "within" the computed window per the established
+  (offset-based) definition.
+- **Test infrastructure decisions:** used a hand-built `searchFixture`
+  (in `search_test.go`) with a real cross-segment phrase, since the
+  existing `sampleSegments` fixture (`transcript_test.go`) has no
+  boundary-spanning phrase and is still used by other, unrelated tests
+  (`TestTranscriptText`/`TestTranscriptTimed`) so was left untouched.
+- **Manual smoke test** (2026-09-01): `rfscVS0vtbw` (freeCodeCamp Python
+  course, same video used for task 14's smoke test), query
+  `"programming in Python"`. Old per-segment search would have missed
+  the very first match entirely — segment 0 ends "...get started
+  programming", segment 1 starts "in Python. Now, ..." — the phrase only
+  exists once the two are joined. New search found this and 5 further
+  matches, `context: 0` correctly narrowed each block to (approximately)
+  just the matched segment(s). Verified via both `core.SearchInTranscript`
+  called directly and `go run ./cmd/youtube-cli search rfscVS0vtbw
+  "programming in Python" --context 0`, output identical in shape.
 
 ## After finishing
 
