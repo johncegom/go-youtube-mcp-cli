@@ -1,0 +1,83 @@
+version: "3"
+
+tasks:
+  build:
+    desc: Build everything
+    cmds:
+      - go build ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./...
+
+  test:race:
+    desc: Run all tests with -race (matches CI)
+    cmds:
+      - go test -race ./...
+
+  fmt:
+    desc: Format all Go files
+    cmds:
+      - gofmt -w .
+
+  fmt:check:
+    desc: Check formatting without modifying files (matches CI)
+    cmds:
+      - |
+        unformatted="$(gofmt -l .)"
+        if [ -n "$unformatted" ]; then
+          echo "The following files are not gofmt-formatted:"
+          echo "$unformatted"
+          exit 1
+        fi
+
+  check:
+    desc: Run the full local toolchain (build, vet, test -race, fmt:check) like CI
+    cmds:
+      - task: build
+      - task: vet
+      - task: test:race
+      - task: fmt:check
+
+  cli:
+    desc: Run the CLI binary (pass args after --, e.g. task cli -- transcript <url>)
+    cmds:
+      - go run ./cmd/youtube-cli {{.CLI_ARGS}}
+
+  mcp:
+    desc: Run the MCP stdio server
+    cmds:
+      - go run ./cmd/youtube-mcp
+
+  install:
+    desc: go install both binaries into $GOPATH/bin (or $GOBIN) for use anywhere on PATH
+    cmds:
+      - go install ./cmd/youtube-cli
+      - go install ./cmd/youtube-mcp
+
+  go:check-update:
+    desc: Check whether a newer stable Go toolchain is available (does not install anything)
+    cmds:
+      - |
+        current="$(go env GOVERSION)"
+        latest="$(curl -fsSL 'https://go.dev/VERSION?m=text' | head -n1)"
+        echo "installed: $current"
+        echo "latest:    $latest"
+        if [ "$current" = "$latest" ]; then
+          echo "Go is up to date."
+        else
+          echo "Update available: download from https://go.dev/dl/ and run the installer for your platform."
+        fi
+
+  deps:update:
+    desc: Update all dependencies to their latest minor/patch versions, tidy go.mod/go.sum, then verify with a full check
+    cmds:
+      - go get -u ./...
+      - go mod tidy
+      - task: check
