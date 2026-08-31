@@ -1,10 +1,10 @@
-# Port youtube-mcp-cli (TypeScript) to Go — Phase 1 + Phase 2
+# go-youtube-mcp-cli: from Go port to standalone product — Phase 1 + Phase 2
 
 ## Context
 
 `johncegom/youtube-mcp-cli` is a small TypeScript npm monorepo that gives AI agents and CLI users transcript/metadata/download access to YouTube videos, without needing an API key. It works by scraping YouTube's watch-page HTML for metadata and shelling out to `yt-dlp` for captions/downloads. It ships two consumable binaries — an MCP stdio server and a `youtube-cli` command — built on a shared `core` package.
 
-The goal of Phase 1 is a faithful **Go port** of the same three-binary/one-core shape, living in this (`go-youtube-mcp-cli`) directory, so it can later grow additional features. This plan covers only the port — no new functionality beyond what the TS version already does.
+Phase 1's goal was a faithful **Go port** of that same three-binary/one-core shape, living in this (`go-youtube-mcp-cli`) directory — no functionality beyond what the TS version already did. Phase 1 is complete (see `docs/LEDGER.md`). Phase 2 (below) deliberately lifted that constraint: this project is no longer scoped to upstream parity, and is evolving as its own standalone product with agent-oriented features that have no TS equivalent. Phase 1's plan is kept below as the historical record of what was ported and why.
 
 Confirmed technology choices (per user):
 - **yt-dlp/ffmpeg binaries**: auto-download on first run via `github.com/lrstanley/go-ytdlp`, matching the original npm package's `postinstall` auto-download behavior.
