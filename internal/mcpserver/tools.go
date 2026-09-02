@@ -63,6 +63,16 @@ type downloadTranscriptInput struct {
 	OutputDir string `json:"outputDir,omitempty" jsonschema:"Optional. Directory to save. Defaults to ~/Downloads."`
 }
 
+type playlistInput struct {
+	URL string `json:"url" jsonschema:"The full YouTube playlist URL or playlist ID"`
+}
+
+type playlistSearchInput struct {
+	URL      string `json:"url" jsonschema:"The full YouTube playlist URL or playlist ID"`
+	Query    string `json:"query" jsonschema:"The keyword or phrase to search for"`
+	Language string `json:"language,omitempty" jsonschema:"Optional. Language code. Defaults to 'en'."`
+}
+
 // ── Result helpers ────────────────────────────────────────────────────────
 
 func textResult(text string, isError bool) *mcp.CallToolResult {
@@ -75,6 +85,12 @@ func textResult(text string, isError bool) *mcp.CallToolResult {
 func invalidURLResult(url string) *mcp.CallToolResult {
 	return textResult(fmt.Sprintf(
 		"Invalid YouTube URL or video ID: %q. Please provide a valid YouTube URL (e.g. https://youtube.com/watch?v=abc123) or a bare video ID.",
+		url), true)
+}
+
+func invalidPlaylistURLResult(url string) *mcp.CallToolResult {
+	return textResult(fmt.Sprintf(
+		"Invalid YouTube playlist URL or playlist ID: %q. Please provide a valid playlist URL (e.g. https://youtube.com/playlist?list=PL...) or a bare playlist ID.",
 		url), true)
 }
 
@@ -317,9 +333,49 @@ func downloadTranscriptTimedHandler(ctx context.Context, _ *mcp.CallToolRequest,
 	return downloadTranscript(ctx, in, true)
 }
 
+func listPlaylistHandler(ctx context.Context, _ *mcp.CallToolRequest, in playlistInput) (*mcp.CallToolResult, any, error) {
+	playlistID := core.ExtractPlaylistID(in.URL)
+	if playlistID == "" {
+		return invalidPlaylistURLResult(in.URL), nil, nil
+	}
+	entries, total, err := core.ListPlaylistVideos(ctx, playlistID)
+	if err != nil {
+		return textResult(err.Error(), true), nil, nil
+	}
+	if len(entries) == 0 {
+		return textResult("This playlist has no videos.", false), nil, nil
+	}
+	lines := make([]string, len(entries))
+	for i, e := range entries {
+		lines[i] = fmt.Sprintf("%d. %s (%s)", i+1, e.Title, e.VideoID)
+	}
+	text := strings.Join(lines, "\n")
+	if len(entries) < total {
+		text += fmt.Sprintf("\n\n(showing first %d of %d videos)", len(entries), total)
+	} else {
+		text += fmt.Sprintf("\n\n%d video(s) total.", total)
+	}
+	return textResult(text, false), nil, nil
+}
+
+func searchPlaylistHandler(ctx context.Context, _ *mcp.CallToolRequest, in playlistSearchInput) (*mcp.CallToolResult, any, error) {
+	playlistID := core.ExtractPlaylistID(in.URL)
+	if playlistID == "" {
+		return invalidPlaylistURLResult(in.URL), nil, nil
+	}
+	if strings.TrimSpace(in.Query) == "" {
+		return textResult("Please provide a non-empty search query.", true), nil, nil
+	}
+	text, err := core.SearchPlaylist(ctx, playlistID, in.Query, in.Language)
+	if err != nil {
+		return textResult(err.Error(), true), nil, nil
+	}
+	return textResult(text, false), nil, nil
+}
+
 // ── Server construction ──────────────────────────────────────────────────
 
-// NewServer builds the youtube-mcp-cli MCP server with all 15 tools
+// NewServer builds the youtube-mcp-cli MCP server with all 17 tools
 // registered (including the 3 alias pairs, which point at the same
 // handler function as their canonical tool).
 func NewServer(version string) *mcp.Server {
@@ -399,6 +455,16 @@ func NewServer(version string) *mcp.Server {
 		Name:        "download_transcript_timed",
 		Description: "Downloads the transcript of a YouTube video as a markdown file (.md) with timestamps. Returns the file path.",
 	}, downloadTranscriptTimedHandler)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_playlist",
+		Description: "Lists the videos in a YouTube playlist (title + video ID, numbered, in playlist order). Capped to the first 25 videos, with a note if the playlist has more.",
+	}, listPlaylistHandler)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "search_playlist",
+		Description: "Searches for a keyword or phrase across every video's transcript in a YouTube playlist (capped to the first 25 videos), fetched sequentially to avoid rate limiting. Returns matches grouped by video as '<title> [MM:SS] <text>' lines, plus a list of any videos skipped due to fetch errors (e.g. no captions).",
+	}, searchPlaylistHandler)
 
 	return server
 }

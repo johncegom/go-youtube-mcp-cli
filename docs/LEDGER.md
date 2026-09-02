@@ -44,7 +44,7 @@ this index) before pausing.
 | 12 | Phase 2: download job tracking (`get_download_status`, `list_downloads`) | [x] done | [docs/tasks/12-download-jobs/TASK.md](tasks/12-download-jobs/TASK.md) |
 | 13 | Phase 2: context-aware transcript search | [x] done | [docs/tasks/13-context-search/TASK.md](tasks/13-context-search/TASK.md) |
 | 14 | Phase 2: chapters (`get_chapters`) | [x] done (out of order, before 13) | [docs/tasks/14-chapters/TASK.md](tasks/14-chapters/TASK.md) |
-| 15 | Phase 2: playlist listing + cross-video search (depends on 11) | [ ] not started | [docs/tasks/15-playlist-search/TASK.md](tasks/15-playlist-search/TASK.md) |
+| 15 | Phase 2: playlist listing + cross-video search (depends on 11) | [x] done | [docs/tasks/15-playlist-search/TASK.md](tasks/15-playlist-search/TASK.md) |
 | — | Out-of-band: test-coverage hardening (tiers 1-4) | [x] done | [docs/tasks/test-coverage-hardening/TASK.md](tasks/test-coverage-hardening/TASK.md) |
 | — | Out-of-band: `Taskfile.yml` dev-tooling wrapper | [x] done | [docs/tasks/taskfile/TASK.md](tasks/taskfile/TASK.md) |
 
@@ -118,8 +118,25 @@ by `---`. Upgrades `search_transcript`/`search_in_transcript` and CLI
 upstream logged as `docs/DECISIONS.md` DECISION-018, per DECISION-013's
 anticipation. Manual smoke test against a real video found a genuine
 cross-boundary match the old search would have missed (see `TASK.md`
-"Notes / deviations"). Task 15 has not been started. The pause-and-ask
-rule still applies between tasks.
+"Notes / deviations"). Task 15 is done (2026-09-02) — see
+`docs/tasks/15-playlist-search/TASK.md` for full detail: a new
+`internal/core/playlist.go` adding `ExtractPlaylistID` (pure, reads the
+`list` query param, mirrors `ExtractVideoID`'s shape), flat-playlist
+listing via yt-dlp's `--flat-playlist --print` mode
+(`ListPlaylistVideos`, capped to 25 entries with a "showing first 25 of
+N" note), and sequential, cache-backed, per-video-failure-tolerant
+cross-video search (`SearchPlaylist`/`searchPlaylistEntries`, reusing
+task 13's `searchSegmentsWithContext` per video and task 11's transcript
+cache transparently — no new cache plumbing). New MCP tools
+`list_playlist`/`search_playlist` registered in
+`internal/mcpserver/tools.go`. This is the first Phase-2 feature with no
+upstream counterpart at all — see `docs/DECISIONS.md` DECISION-019. Manual smoke test against a real
+239-video public playlist confirmed correct listing/cap, correct
+cross-video search matches with timestamps, and a ~28x cache speedup on
+a repeat search (2m13s → 4.7s) — see `TASK.md` "Notes / deviations" for
+the full transcript. **This completes the currently-approved Phase 2
+scope (tasks 11-15).** The pause-and-ask rule still applies before any
+further scoping.
 Related: BUG-003 (dead Node-ism branches in
 `TranscriptErrorText`) is fixed and merged to `main` (PR #10, commit
 `be6c93d`) — see `docs/BUGS.md` for the full writeup.
@@ -146,8 +163,7 @@ future task.
 1. Read this index first (not the individual task files, unless you need one).
 2. Run `go build ./... && go vet ./... && go test ./...` to confirm the current state still holds.
 3. Skim `docs/RETRO.md` for any still-relevant advice before starting new work.
-4. Next task: **15** (playlist listing + cross-video search, depends on 11
-   which is done) — 13 and 14 are both done, out of the original strict
-   order for 14. Its DoD + Test Plan should be (re-)reviewed before
-   implementation starts.
+4. **Phase 2 (tasks 11-15) is complete.** No task is currently approved to
+   start next — the next step is a new scoping pass with the human before
+   any further Phase 3+ work begins.
 5. After finishing a task: update **that task's `TASK.md`** with full detail first, then update this index's status column/checkbox for it, then pause and ask the human before starting the next task. If the task involved a deliberate design/scope tradeoff, log it in `docs/DECISIONS.md` too; if it surfaced a way-of-working lesson that generalizes beyond that one task, log it in `docs/RETRO.md`.
