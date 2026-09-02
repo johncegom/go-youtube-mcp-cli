@@ -89,6 +89,49 @@ func TestSearchTranscriptHandler_EmptyQuery(t *testing.T) {
 	}
 }
 
+func TestListPlaylistHandler_InvalidURL(t *testing.T) {
+	res, _, err := listPlaylistHandler(context.Background(), nil, playlistInput{URL: "not a url"})
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if !res.IsError {
+		t.Error("IsError = false, want true for an invalid playlist URL")
+	}
+}
+
+func TestListPlaylistHandler_VideoURLNotPlaylist(t *testing.T) {
+	res, _, err := listPlaylistHandler(context.Background(), nil, playlistInput{URL: "dQw4w9WgXcQ"})
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if !res.IsError {
+		t.Error("IsError = false, want true for a bare video ID (not a playlist ID)")
+	}
+}
+
+func TestSearchPlaylistHandler_InvalidURL(t *testing.T) {
+	res, _, err := searchPlaylistHandler(context.Background(), nil, playlistSearchInput{URL: "not a url", Query: "hi"})
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if !res.IsError {
+		t.Error("IsError = false, want true for an invalid playlist URL")
+	}
+}
+
+func TestSearchPlaylistHandler_EmptyQuery(t *testing.T) {
+	res, _, err := searchPlaylistHandler(context.Background(), nil, playlistSearchInput{URL: "PLBCF2DAC6FFB574DE", Query: "   "})
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if !res.IsError {
+		t.Error("IsError = false, want true for a blank query")
+	}
+	if !strings.Contains(contentText(t, res), "non-empty search query") {
+		t.Errorf("text = %q, want it to mention the empty-query requirement", contentText(t, res))
+	}
+}
+
 func TestDownloadVideoHandler_InvalidURL(t *testing.T) {
 	res, _, err := downloadVideoHandler(context.Background(), nil, downloadVideoInput{URL: "not a url"})
 	if err != nil {
@@ -231,13 +274,14 @@ func TestNewServer_ToolCount(t *testing.T) {
 	cs := connectedClient(t)
 	// 8 canonical tools + 3 aliases (get_transcript_timestamps,
 	// get_video_metadata, search_in_transcript) + get_transcript_range,
-	// download_transcript_timed, get_download_status, list_downloads, and
-	// get_chapters = 15 — see tools.go's NewServer doc comment.
+	// download_transcript_timed, get_download_status, list_downloads,
+	// get_chapters, list_playlist, and search_playlist = 17 — see
+	// tools.go's NewServer doc comment.
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
-	if got, want := len(res.Tools), 15; got != want {
+	if got, want := len(res.Tools), 17; got != want {
 		names := make([]string, len(res.Tools))
 		for i, tl := range res.Tools {
 			names[i] = tl.Name
