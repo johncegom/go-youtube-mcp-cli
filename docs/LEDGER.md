@@ -47,6 +47,7 @@ this index) before pausing.
 | 15 | Phase 2: playlist listing + cross-video search (depends on 11) | [x] done | [docs/tasks/15-playlist-search/TASK.md](tasks/15-playlist-search/TASK.md) |
 | — | Out-of-band: test-coverage hardening (tiers 1-4) | [x] done | [docs/tasks/test-coverage-hardening/TASK.md](tasks/test-coverage-hardening/TASK.md) |
 | — | Out-of-band: `Taskfile.yml` dev-tooling wrapper | [x] done | [docs/tasks/taskfile/TASK.md](tasks/taskfile/TASK.md) |
+| 16 | Transcript-fetch observability logging | [x] done | [docs/tasks/16-transcript-observability/TASK.md](tasks/16-transcript-observability/TASK.md) |
 
 ## Current status
 
@@ -158,12 +159,32 @@ current code path). Tier 5 (httptest/fake-binary I/O-boundary tests for
 `FetchVideoMetadata`/`fetchSegmentsFromYtDlp`) was explicitly deferred to a
 future task.
 
+**Task 16 (out-of-band, done, 2026-09-08)** — see
+`docs/tasks/16-transcript-observability/TASK.md` for full detail. Prompted
+by a real support case: a `get_transcript_timed` call on video `kjoQPn--F7A`
+returned a timeout error, but `errors.log` had no record of it — the
+existing `LogDownloadError` (`internal/core/paths.go`) was only ever wired
+into the download path, never the transcript path. Fixed by extracting
+`TranscriptErrorText`'s classification into a pure, separately-tested
+`classifyTranscriptError` helper (also unit-tested), then logging every
+transcript-fetch failure from the single choke point all transcript
+entrypoints share (`fetchSegmentsFromYtDlp` in `internal/core/transcript.go`
+— covers both `cmd/youtube-cli` and `cmd/youtube-mcp`, not just the MCP
+server) via a `defer` on named returns, with elapsed duration, language, and
+classified category alongside the raw error text. Also logs a
+`transcript_fetch_slow` line for successful fetches exceeding 20s (2/3 of
+the 30s timeout budget), as an early-warning trend signal for the kind of
+intermittent timeout BUG-007 took a live investigation to root-cause. No new
+logging framework — reused the existing plain-text `errors.log`. See
+`docs/DECISIONS.md` DECISION-020.
+
 ## Resume checklist for next session
 
 1. Read this index first (not the individual task files, unless you need one).
 2. Run `go build ./... && go vet ./... && go test ./...` to confirm the current state still holds.
 3. Skim `docs/RETRO.md` for any still-relevant advice before starting new work.
-4. **Phase 2 (tasks 11-15) is complete.** No task is currently approved to
-   start next — the next step is a new scoping pass with the human before
-   any further Phase 3+ work begins.
+4. **Phase 2 (tasks 11-15) is complete; task 16 (out-of-band observability
+   logging) is also done.** No task is currently approved to start next —
+   the next step is a new scoping pass with the human before any further
+   Phase 3+ work begins.
 5. After finishing a task: update **that task's `TASK.md`** with full detail first, then update this index's status column/checkbox for it, then pause and ask the human before starting the next task. If the task involved a deliberate design/scope tradeoff, log it in `docs/DECISIONS.md` too; if it surfaced a way-of-working lesson that generalizes beyond that one task, log it in `docs/RETRO.md`.

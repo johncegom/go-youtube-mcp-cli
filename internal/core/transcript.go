@@ -157,19 +157,37 @@ func filterSegmentsByRange(segments []transcriptSegment, startMs, endMs *float64
 //     error codes ported from the upstream TS project) never matched any
 //     real source and have been removed.
 func TranscriptErrorText(videoID string, err error) string {
+	switch classifyTranscriptError(err) {
+	case "timeout":
+		return fmt.Sprintf("Transcript fetch timed out for video %s. Please try again.", videoID)
+	case "missing_captions":
+		return fmt.Sprintf("No transcript available for video %s. The video may not have captions.", videoID)
+	case "network":
+		return fmt.Sprintf("Network error while fetching transcript for video %s. Please check your internet connection.", videoID)
+	default:
+		return fmt.Sprintf("Failed to fetch transcript for video %s: %s", videoID, err.Error())
+	}
+}
+
+// classifyTranscriptError buckets a raw fetch error into one of four
+// categories ("timeout" / "missing_captions" / "network" / "generic"),
+// using the exact matching rules documented on TranscriptErrorText above.
+// It backs both that function's user-facing message and the
+// transcript_fetch observability log line (see fetchSegmentsFromYtDlp).
+func classifyTranscriptError(err error) string {
 	message := err.Error()
 	var netErr net.Error
 	switch {
 	case strings.Contains(message, "timed out"):
-		return fmt.Sprintf("Transcript fetch timed out for video %s. Please try again.", videoID)
+		return "timeout"
 	case strings.Contains(message, "No transcript available") || strings.Contains(message, "captions"):
-		return fmt.Sprintf("No transcript available for video %s. The video may not have captions.", videoID)
+		return "missing_captions"
 	case errors.As(err, &netErr):
-		return fmt.Sprintf("Network error while fetching transcript for video %s. Please check your internet connection.", videoID)
+		return "network"
 	case strings.Contains(message, "Unable to download webpage") || strings.Contains(message, "Unable to download API page"):
-		return fmt.Sprintf("Network error while fetching transcript for video %s. Please check your internet connection.", videoID)
+		return "network"
 	default:
-		return fmt.Sprintf("Failed to fetch transcript for video %s: %s", videoID, message)
+		return "generic"
 	}
 }
 
@@ -206,8 +224,33 @@ func fetchSegments(ctx context.Context, videoID, language string) ([]transcriptS
 	})
 }
 
-func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) ([]transcriptSegment, error) {
-	if err := EnsureYtDlp(ctx); err != nil {
+// transcriptFetchTimeout bounds a single yt-dlp subtitle-fetch call.
+// transcriptFetchSlowThreshold (~2/3 of the timeout) flags a successful
+// fetch that came close to it, giving early warning of a fetch trending
+// toward failure before it actually starts timing out — see
+// docs/tasks/16-transcript-observability/TASK.md.
+const (
+	transcriptFetchTimeout       = 30 * time.Second
+	transcriptFetchSlowThreshold = 20 * time.Second
+)
+
+// formatTranscriptFailureLog renders a transcript_fetch failure as a single
+// log line body (the LogDownloadError "msg" argument) — kept separate from
+// the file write so the formatting itself is unit-testable.
+func formatTranscriptFailureLog(language string, elapsed time.Duration, category string, err error) string {
+	return fmt.Sprintf("lang=%s duration=%s category=%s err=%s", language, elapsed.Round(time.Millisecond), category, err.Error())
+}
+
+func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (segments []transcriptSegment, err error) {
+	start := time.Now()
+	defer func() {
+		if err != nil {
+			LogDownloadError(fmt.Sprintf("transcript_fetch %s", videoID),
+				formatTranscriptFailureLog(language, time.Since(start), classifyTranscriptError(err), err))
+		}
+	}()
+
+	if err = EnsureYtDlp(ctx); err != nil {
 		return nil, err
 	}
 
@@ -217,7 +260,7 @@ func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) ([]tr
 	}
 	defer os.RemoveAll(tmpDir)
 
-	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	runCtx, cancel := context.WithTimeout(ctx, transcriptFetchTimeout)
 	defer cancel()
 
 	// SubLangs uses an exact language match, not a "language.*" wildcard
@@ -268,9 +311,13 @@ func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) ([]tr
 	if err != nil {
 		return nil, err
 	}
-	segments := parseVtt(string(content))
+	segments = parseVtt(string(content))
 	if len(segments) == 0 {
 		return nil, fmt.Errorf("no transcript found for video %s", videoID)
+	}
+	if elapsed := time.Since(start); elapsed > transcriptFetchSlowThreshold {
+		LogDownloadError(fmt.Sprintf("transcript_fetch_slow %s", videoID),
+			fmt.Sprintf("lang=%s duration=%s", language, elapsed.Round(time.Millisecond)))
 	}
 	return segments, nil
 }
