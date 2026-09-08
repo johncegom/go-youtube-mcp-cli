@@ -6,6 +6,7 @@ import (
 	"net"
 	"reflect"
 	"testing"
+	"time"
 )
 
 // Fixture and expected output were derived by running the upstream TS
@@ -272,4 +273,57 @@ func FuzzTranscriptErrorText(f *testing.F) {
 	f.Fuzz(func(t *testing.T, message string) {
 		_ = TranscriptErrorText("abc123", errors.New(message)) // must not panic
 	})
+}
+
+// classifyTranscriptError's ground truth is the same real error sources
+// used above for TestTranscriptErrorText (see that test's comment) — it
+// backs both TranscriptErrorText's user-facing sentence and the new
+// observability log line, so it must classify identically.
+func TestClassifyTranscriptError(t *testing.T) {
+	const capturedYtDlpStderr = `ERROR: [generic] Unable to download webpage: HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed) (caused by TransportError("HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed)"))`
+	const capturedYtDlpProxyStderr = `ERROR: [youtube] dQw4w9WgXcQ: Unable to download API page: ('Unable to connect to proxy', NewConnectionError("HTTPSConnection(host='127.0.0.1', port=1): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it")) (caused by ProxyError('(\'Unable to connect to proxy\', NewConnectionError("HTTPSConnection(host=\'127.0.0.1\', port=1): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"))'))`
+
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"timed out", errors.New("Transcript fetch timed out"), "timeout"},
+		{"no transcript", errors.New("No transcript available"), "missing_captions"},
+		{"captions", errors.New("the video may not have captions"), "missing_captions"},
+		{"real net.Error (dial refused)", dialRefused(t), "network"},
+		{"real net.Error, wrapped like EnsureYtDlp", fmt.Errorf("yt-dlp binary not found and auto-install failed: %w", dialRefused(t)), "network"},
+		{"captured yt-dlp network stderr (generic webpage fetch)", errors.New(capturedYtDlpStderr), "network"},
+		{"captured yt-dlp network stderr (API page fetch via proxy)", errors.New(capturedYtDlpProxyStderr), "network"},
+		{"other", errors.New("boom"), "generic"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifyTranscriptError(tc.err); got != tc.want {
+				t.Errorf("classifyTranscriptError() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFormatTranscriptFailureLog(t *testing.T) {
+	cases := []struct {
+		name     string
+		language string
+		elapsed  time.Duration
+		category string
+		err      error
+		want     string
+	}{
+		{"timeout", "en", 30*time.Second + 4*time.Millisecond, "timeout", errors.New("transcript fetch timed out"), `lang=en duration=30.004s category=timeout err=transcript fetch timed out`},
+		{"missing captions, sub-second", "it", 812 * time.Millisecond, "missing_captions", errors.New(`no transcript available for video abc123. The video may not have captions in language "it"`), `lang=it duration=812ms category=missing_captions err=no transcript available for video abc123. The video may not have captions in language "it"`},
+		{"generic", "en", 1500 * time.Millisecond, "generic", errors.New("boom"), `lang=en duration=1.5s category=generic err=boom`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := formatTranscriptFailureLog(tc.language, tc.elapsed, tc.category, tc.err); got != tc.want {
+				t.Errorf("formatTranscriptFailureLog() = %q, want %q", got, tc.want)
+			}
+		})
+	}
 }
