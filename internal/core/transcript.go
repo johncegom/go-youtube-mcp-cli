@@ -156,12 +156,25 @@ func filterSegmentsByRange(segments []transcriptSegment, startMs, endMs *float64
 //     The previous "ENOTFOUND"/"ECONNREFUSED" substrings (Node.js/libuv
 //     error codes ported from the upstream TS project) never matched any
 //     real source and have been removed.
+//
+// The rate-limited case (see docs/BUGS.md BUG-009) is matched on yt-dlp's
+// own real wrapper phrasing, captured directly from a live 429 hit against
+// YouTube's auto-caption endpoint during that investigation:
+//
+//	ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+//
+// YouTube throttles auto-generated-caption downloads on a separate,
+// stricter quota than manual captions or general page/metadata scraping;
+// once exhausted it can stay exhausted for hours regardless of retries, so
+// the message deliberately does not suggest an immediate retry will help.
 func TranscriptErrorText(videoID string, err error) string {
 	switch classifyTranscriptError(err) {
 	case "timeout":
 		return fmt.Sprintf("Transcript fetch timed out for video %s. Please try again.", videoID)
 	case "missing_captions":
 		return fmt.Sprintf("No transcript available for video %s. The video may not have captions.", videoID)
+	case "rate_limited":
+		return fmt.Sprintf("YouTube is throttling auto-caption downloads for this network right now (video %s). This isn't a transient blip — it can take hours to clear after heavy usage, and retrying immediately won't help. Wait before trying again, or use a different network.", videoID)
 	case "network":
 		return fmt.Sprintf("Network error while fetching transcript for video %s. Please check your internet connection.", videoID)
 	default:
@@ -169,11 +182,12 @@ func TranscriptErrorText(videoID string, err error) string {
 	}
 }
 
-// classifyTranscriptError buckets a raw fetch error into one of four
-// categories ("timeout" / "missing_captions" / "network" / "generic"),
-// using the exact matching rules documented on TranscriptErrorText above.
-// It backs both that function's user-facing message and the
-// transcript_fetch observability log line (see fetchSegmentsFromYtDlp).
+// classifyTranscriptError buckets a raw fetch error into one of five
+// categories ("timeout" / "missing_captions" / "rate_limited" / "network" /
+// "generic"), using the exact matching rules documented on
+// TranscriptErrorText above. It backs both that function's user-facing
+// message and the transcript_fetch observability log line (see
+// fetchSegmentsFromYtDlp).
 func classifyTranscriptError(err error) string {
 	message := err.Error()
 	var netErr net.Error
@@ -182,6 +196,8 @@ func classifyTranscriptError(err error) string {
 		return "timeout"
 	case strings.Contains(message, "No transcript available") || strings.Contains(message, "captions"):
 		return "missing_captions"
+	case strings.Contains(message, "429") || strings.Contains(message, "Too Many Requests"):
+		return "rate_limited"
 	case errors.As(err, &netErr):
 		return "network"
 	case strings.Contains(message, "Unable to download webpage") || strings.Contains(message, "Unable to download API page"):

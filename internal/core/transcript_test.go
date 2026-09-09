@@ -233,8 +233,12 @@ func dialRefused(t *testing.T) error {
 // vocabulary.
 func TestTranscriptErrorText(t *testing.T) {
 	const wantNetworkMsg = `Network error while fetching transcript for video abc123. Please check your internet connection.`
+	const wantRateLimitedMsg = `YouTube is throttling auto-caption downloads for this network right now (video abc123). This isn't a transient blip — it can take hours to clear after heavy usage, and retrying immediately won't help. Wait before trying again, or use a different network.`
 	const capturedYtDlpStderr = `ERROR: [generic] Unable to download webpage: HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed) (caused by TransportError("HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed)"))`
 	const capturedYtDlpProxyStderr = `ERROR: [youtube] dQw4w9WgXcQ: Unable to download API page: ('Unable to connect to proxy', NewConnectionError("HTTPSConnection(host='127.0.0.1', port=1): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it")) (caused by ProxyError('(\'Unable to connect to proxy\', NewConnectionError("HTTPSConnection(host=\'127.0.0.1\', port=1): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"))'))`
+	// Captured directly from a live 429 against YouTube's auto-caption
+	// endpoint during the docs/BUGS.md BUG-009 investigation.
+	const capturedYtDlp429Stderr = `ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests`
 
 	cases := []struct {
 		name string
@@ -248,6 +252,7 @@ func TestTranscriptErrorText(t *testing.T) {
 		{"real net.Error, wrapped like EnsureYtDlp", fmt.Errorf("yt-dlp binary not found and auto-install failed: %w", dialRefused(t)), wantNetworkMsg},
 		{"captured yt-dlp network stderr (generic webpage fetch)", errors.New(capturedYtDlpStderr), wantNetworkMsg},
 		{"captured yt-dlp network stderr (API page fetch via proxy)", errors.New(capturedYtDlpProxyStderr), wantNetworkMsg},
+		{"captured yt-dlp 429 stderr (auto-caption rate limit)", errors.New(capturedYtDlp429Stderr), wantRateLimitedMsg},
 		{"other", errors.New("boom"), `Failed to fetch transcript for video abc123: boom`},
 	}
 	for _, tc := range cases {
@@ -267,6 +272,7 @@ func FuzzTranscriptErrorText(f *testing.F) {
 	f.Add("Transcript fetch timed out")
 	f.Add(`ERROR: [generic] Unable to download webpage: HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed)`)
 	f.Add(`ERROR: [youtube] dQw4w9WgXcQ: Unable to download API page: ('Unable to connect to proxy', NewConnectionError(...))`)
+	f.Add(`ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests`)
 	f.Add("dial tcp: lookup youtube.com: ENOTFOUND")
 	f.Add("boom")
 
@@ -282,6 +288,9 @@ func FuzzTranscriptErrorText(f *testing.F) {
 func TestClassifyTranscriptError(t *testing.T) {
 	const capturedYtDlpStderr = `ERROR: [generic] Unable to download webpage: HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed) (caused by TransportError("HTTPSConnection(host='nonexistent.invalid', port=443): Failed to resolve 'nonexistent.invalid' ([Errno 11001] getaddrinfo failed)"))`
 	const capturedYtDlpProxyStderr = `ERROR: [youtube] dQw4w9WgXcQ: Unable to download API page: ('Unable to connect to proxy', NewConnectionError("HTTPSConnection(host='127.0.0.1', port=1): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it")) (caused by ProxyError('(\'Unable to connect to proxy\', NewConnectionError("HTTPSConnection(host=\'127.0.0.1\', port=1): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"))'))`
+	// Captured directly from a live 429 against YouTube's auto-caption
+	// endpoint during the docs/BUGS.md BUG-009 investigation.
+	const capturedYtDlp429Stderr = `ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests`
 
 	cases := []struct {
 		name string
@@ -295,6 +304,7 @@ func TestClassifyTranscriptError(t *testing.T) {
 		{"real net.Error, wrapped like EnsureYtDlp", fmt.Errorf("yt-dlp binary not found and auto-install failed: %w", dialRefused(t)), "network"},
 		{"captured yt-dlp network stderr (generic webpage fetch)", errors.New(capturedYtDlpStderr), "network"},
 		{"captured yt-dlp network stderr (API page fetch via proxy)", errors.New(capturedYtDlpProxyStderr), "network"},
+		{"captured yt-dlp 429 stderr (auto-caption rate limit)", errors.New(capturedYtDlp429Stderr), "rate_limited"},
 		{"other", errors.New("boom"), "generic"},
 	}
 	for _, tc := range cases {
@@ -317,6 +327,7 @@ func TestFormatTranscriptFailureLog(t *testing.T) {
 	}{
 		{"timeout", "en", 30*time.Second + 4*time.Millisecond, "timeout", errors.New("transcript fetch timed out"), `lang=en duration=30.004s category=timeout err=transcript fetch timed out`},
 		{"missing captions, sub-second", "it", 812 * time.Millisecond, "missing_captions", errors.New(`no transcript available for video abc123. The video may not have captions in language "it"`), `lang=it duration=812ms category=missing_captions err=no transcript available for video abc123. The video may not have captions in language "it"`},
+		{"rate limited", "en", 2100 * time.Millisecond, "rate_limited", errors.New("yt-dlp failed: ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests"), `lang=en duration=2.1s category=rate_limited err=yt-dlp failed: ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests`},
 		{"generic", "en", 1500 * time.Millisecond, "generic", errors.New("boom"), `lang=en duration=1.5s category=generic err=boom`},
 	}
 	for _, tc := range cases {

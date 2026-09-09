@@ -575,3 +575,61 @@ The investigation was also blocked from going further by an **instrumentation ga
 ### Decision
 
 Pending — awaiting human decision on which option(s) to pursue. The orphaned-process pile-up found during this investigation (5 concurrent `youtube-mcp.exe` instances, accumulated across repeated Claude Desktop reconnects) was manually cleaned up (`Stop-Process`) as an immediate mitigation, but no code change has been made yet for either the process-duplication issue or the timeout itself — both remain open pending the decision above.
+
+---
+
+## BUG-009: Auto-generated captions 429 on a separate, stricter YouTube quota than manual captions, with no retry/backoff in the tool
+
+- **Status:** fixed
+- **Discovered:** user-reported session, 2026-09-09, after `get_transcript` failed repeatedly (6 manual retries with increasing backoff up to 30s) against video `5oer61Xyi4c` (~6.5 hours long) through Claude Desktop, then continued failing ~3 hours later against unrelated videos.
+- **Reachability: yes** — real call path (`get_transcript`/etc. → `core.GetTranscriptText`/etc. → `fetchSegmentsFromYtDlp`, `internal/core/transcript.go`), hit repeatedly by a real user in real sessions, not a test-only branch.
+- **Inherited from upstream:** no — this is YouTube-side rate limiting, not a code defect the port introduced or carried over; the same 429 reproduces identically calling `yt-dlp` directly, outside any of our Go code.
+
+### Symptom
+
+`get_transcript`/`youtube-cli transcript` fails with:
+```
+error: Failed to fetch transcript for video <id>: yt-dlp failed: ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+```
+This was first suspected to be either an MCP-specific problem or a general IP-wide ban, but neither held up under investigation:
+- The plain CLI (`go run ./cmd/youtube-cli transcript <id>`), run directly in a terminal, reproduces the identical 429 — ruling out anything MCP/Claude-Desktop-specific.
+- Metadata scraping (`youtube-cli metadata <id>`) for the same video succeeds fine at the same time — ruling out a full IP ban.
+- A video with **manually-uploaded** English subtitles (`dQw4w9WgXcQ`) fetched its transcript successfully, repeatedly, throughout the same window that two other videos with **only auto-generated captions** (`5oer61Xyi4c`, `BqRhBq-_kgE`) both 429'd consistently — including ~3 hours after the original 6-retry failure, and regardless of which yt-dlp player client (`web`/`visionos` default vs. explicit `android` via `--extractor-args`) was used.
+- Direct `yt-dlp` calls confirm the split: `--write-sub` (manual captions) on `dQw4w9WgXcQ` downloads instantly; `--write-auto-sub` (auto captions) on either of the other two videos 429s every time.
+
+### Root cause
+
+YouTube appears to enforce a separate, stricter rate-limit bucket for the auto-generated-caption ("ASR"/ `kind=asr` timedtext) download endpoint than for manually-uploaded caption tracks. Once that bucket is exhausted — plausibly by pulling a 6.5-hour video's auto-captions, which likely requires many more underlying timedtext segment requests than a typical short video — every subsequent auto-caption request from this IP fails with 429, for any video, for an extended period (still failing ~3 hours after the triggering pull), while manual-caption downloads and general page/metadata scraping are entirely unaffected.
+
+`fetchSegmentsFromYtDlp` (`internal/core/transcript.go`) has no retry or backoff of its own on a 429 — it fails the request immediately and surfaces the raw yt-dlp error. The BUG-008 investigation separately confirmed the timeout-clustering mechanism for a different symptom (30s deadline exceeded); this bug is a distinct, now-diagnosed root cause specifically for the 429 case, not the BUG-008 timeout.
+
+### Options
+
+- **Do nothing (accept as inherent external limit):** this is YouTube throttling its own service, not something client-side retry can reliably outrun if the quota window is long (observed still active 3+ hours later); document it as expected behavior for heavy auto-caption usage and let users wait it out or switch network/IP.
+- **Add bounded retry-with-backoff specifically on 429** in `fetchSegmentsFromYtDlp`: would help for short-lived, low-volume 429s but would not have helped in this session's repro, since the throttle was still active 3 hours and many retries later — risks adding latency/complexity for a quota window client-side retry can't shorten.
+- **Surface a clearer, more specific user-facing error** distinguishing "auto-caption quota throttled, try again later or use a different network" from the current generic "Too Many Requests" message, without adding retry logic — cheaper than a retry loop and sets correct user expectations (this is not a transient blip that a few more seconds will fix).
+
+### Decision
+
+Fix now (human decision, this session): **Option 3 only** — a clearer,
+429-specific user-facing message, no retry/backoff logic. Implemented as:
+1. `classifyTranscriptError` (`internal/core/transcript.go`) gained a new
+   `"rate_limited"` category, matched on `"429"` / `"Too Many Requests"` —
+   confirmed no collision with the existing `timeout`/`missing_captions`/
+   `network` substrings.
+2. `TranscriptErrorText` returns a message that explicitly says this is
+   YouTube-side throttling, not a transient blip, that immediate retry
+   won't help, and to wait or switch networks — deliberately not
+   suggesting a short retry, since this session's data showed the throttle
+   still active 3+ hours and many retries after the triggering pull.
+3. Unit-tested (`internal/core/transcript_test.go`,
+   `TestTranscriptErrorText`/`TestClassifyTranscriptError`/
+   `TestFormatTranscriptFailureLog`/`FuzzTranscriptErrorText`) against the
+   exact raw 429 string captured live during this bug's investigation.
+4. Verified end-to-end: `youtube-cli transcript 5oer61Xyi4c` (still
+   throttled at verification time) now returns the new message instead of
+   the raw yt-dlp error.
+
+No retry/backoff logic was added (Option 2, declined) — this session's own
+repro data (still 429ing 3+ hours and many retries later) showed retries
+don't reliably outrun YouTube's cooldown for this specific throttle.
