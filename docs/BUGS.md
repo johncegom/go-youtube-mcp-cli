@@ -510,3 +510,63 @@ as:
    change on an I/O-bound builder with no existing unit tests for its flag
    wiring, consistent with project convention of leaving `yt-dlp`
    invocation behavior to manual/smoke verification.
+
+---
+
+## BUG-008: `get_transcript` reliably times out at ~30s through Claude Desktop, but succeeds instantly via the CLI for the identical video — root cause unconfirmed
+
+- **Status:** open
+- **Discovered:** user-reported (Claude Desktop MCP client) session, 2026-09-08/09, against `kjoQPn--F7A`. Investigated live via the actual per-connection MCP log (`%LOCALAPPDATA%\Claude\Logs\mcp-server-youtube-mcp.log`) and this project's own `errors.log` (`os.UserCacheDir()/youtube-mcp/errors.log`).
+- **Reachability: yes** — real call path (`get_transcript`/other transcript tools → `core.GetTranscriptText`/etc. → `fetchSegmentsFromYtDlp`, `internal/core/transcript.go:244`), hit repeatedly by a real user in a real Claude Desktop session, not a test-only branch.
+- **Inherited from upstream:** no — no evidence tying this to TS-original behavior; looks specific to this machine's process/parent-process environment.
+
+### Symptom
+
+Every `get_transcript` (and presumably other transcript tools) call for video `kjoQPn--F7A` made through Claude Desktop fails with the user-facing message:
+```
+Transcript fetch timed out for video kjoQPn--F7A. Please try again.
+```
+"Please try again" is misleading: it fails identically on every retry within the same session, across multiple fresh server process restarts.
+
+The project's own `errors.log` confirms this happened repeatedly, always for the same video/language, always clustered at almost exactly the `transcriptFetchTimeout` value (30s):
+```
+[2026-09-08T19:24:40Z] transcript_fetch kjoQPn--F7A: lang=en duration=33.937s category=timeout err=transcript fetch timed out
+[2026-09-08T19:27:59Z] transcript_fetch kjoQPn--F7A: lang=en duration=33.921s category=timeout err=transcript fetch timed out
+[2026-09-08T19:28:31Z] transcript_fetch kjoQPn--F7A: lang=en duration=31.003s category=timeout err=transcript fetch timed out
+... (6 more, all 31.00–31.02s)
+[2026-09-09T02:48:32Z] transcript_fetch kjoQPn--F7A: lang=en duration=34.571s category=timeout err=transcript fetch timed out
+[2026-09-09T02:49:06Z] transcript_fetch kjoQPn--F7A: lang=en duration=31.001s category=timeout err=transcript fetch timed out
+[2026-09-09T02:49:48Z] transcript_fetch kjoQPn--F7A: lang=en duration=31.002s category=timeout err=transcript fetch timed out
+[2026-09-09T02:50:31Z] transcript_fetch kjoQPn--F7A: lang=en duration=31.016s category=timeout err=transcript fetch timed out
+```
+Critically: `go run ./cmd/youtube-cli transcript kjoQPn--F7A` on the **same machine, same video, same day**, run directly from a terminal, returned the full transcript **immediately** (well under a second to first output), with no hang at all — reproduced once, cleanly.
+
+### Root cause
+
+**Unknown — needs further investigation.** What was ruled out during this session's investigation:
+- Not a stale binary: the `youtube-mcp.exe` Claude Desktop invokes (`C:\Users\Admin\go\bin\youtube-mcp.exe`) was built same-day, after the BUG-007 `ForceIPv4` fix, and that fix is present in the running binary.
+- Not IPv6 routing (BUG-007's cause): `ForceIPv4()` is already unconditionally applied in `NewYtDlpCommand()` (`internal/core/ytdlp.go:129`), and a fresh CLI run succeeds instantly, which wouldn't happen if this machine's outbound routing were generally broken.
+- Not a user/machine-wide HTTP(S) proxy: `HTTP_PROXY`/`HTTPS_PROXY` (User + Machine scope) are unset, and `netsh winhttp show proxy` reports direct access, no proxy.
+- Not an explicit Windows Firewall block rule: no rule targets `yt-dlp.exe` or `youtube-mcp.exe` by name.
+- Not simply "orphaned process contention": at one point 5 separate `youtube-mcp.exe` processes were found running simultaneously (PIDs accumulated across repeated Claude Desktop reconnects between 9:42–9:50 AM, since cleaned up — see Decision below), which looked like a plausible cause, but the actual per-connection log (`mcp-server-youtube-mcp.log`) shows the identical ~31s timeout pattern occurring on a single, freshly-started, otherwise-idle server process too (first `tools/call` after `initialize` succeeds in 2s — a metadata call — then every transcript call from that same lone process times out at ~31s). So process duplication is a real, separate problem (see Decision) but not the demonstrated cause of the timeout itself.
+
+What's left unexplained: the one reliable, reproducible distinguishing factor found so far is **process spawned as a child of Claude Desktop vs. spawned from an interactive terminal**, for the literal same `yt-dlp` invocation against the same video. Candidate explanations not yet confirmed or ruled out:
+- AV/Defender or other endpoint-security behavioral scanning treating child processes of Claude Desktop differently from terminal-spawned processes (added latency on outbound connections established by such children).
+- Some inherited process/security-context restriction specific to how Claude Desktop (an Electron app installed via MSIX-style packaging — its user data lives under `AppData\Local\Packages\Claude_<id>\...`) spawns child processes.
+- A genuinely intermittent YouTube-side rate-limit/throttle (same family as BUG-001) that happened to coincide with the Claude Desktop session and had cleared by the time the CLI repro ran minutes later — can't be ruled out with the data collected so far, since only one CLI repro attempt was made.
+
+The investigation was also blocked from going further by an **instrumentation gap**: `fetchSegmentsFromYtDlp`'s timeout logging (`internal/core/transcript.go`, task 16 observability) records only the classified failure string and elapsed duration — it does not capture `yt-dlp`'s own stdout/stderr up to the point of cancellation, nor the subprocess PID, nor whether the subprocess was actually killed on timeout. So there's no way, from the log alone, to tell whether the 30s was spent stuck at DNS resolution, TCP connect, TLS handshake, waiting on YouTube's response, or something else — which is what's actually needed to distinguish the candidate explanations above.
+
+### Options
+
+- **Add diagnostic instrumentation first (recommended before attempting a fix):**
+  1. Capture `yt-dlp`'s own stdout/stderr (ideally with `-v`/verbose progress) up to the moment `runCtx` is cancelled, and log the tail of it to `errors.log` on a `category=timeout` failure, not just the generic classified message.
+  2. Log the spawned `yt-dlp` process's PID and whether the kill-on-cancel actually succeeded, to confirm or rule out a leaked/zombie subprocess (which would also explain the separate orphaned-`youtube-mcp.exe`-process observation, if a handler blocked on a leaked subprocess is what's preventing prompt shutdown on reconnect).
+  3. With that in place, wait for the next live repro (in Claude Desktop) and capture the enriched log before proposing a fix.
+- **Add orphan self-detection to `youtube-mcp.exe`** (`cmd/youtube-mcp/main.go`), *not* a single-instance/kill-siblings guard: a stdio MCP server is legitimately spawned once per client connection, so multiple simultaneous instances (Claude Desktop plus a terminal-launched one, or Desktop opening more than one connection) are a normal, valid state — a naive "kill any other running instance of myself" guard would tear down another client's live connection, not just true orphans, since the two cases are indistinguishable by process count alone. Instead, each instance should periodically check whether *its own* parent process (the process that spawned it) is still alive, and self-exit if not, and/or force-exit within a bounded grace period after detecting stdin EOF even if a handler is still blocked on a slow `yt-dlp` call, rather than waiting indefinitely for a graceful drain. This only ever acts on the process's own state, so it's safe under any number of concurrent legitimate clients, and is independently justified even if it turns out unrelated to the timeout's root cause.
+  - **Must work identically on Windows, Linux, and macOS** — this project ships all three (`.goreleaser.yaml`, `docs/tasks/10-packaging/TASK.md`), even though CI (`docs/DECISIONS.md` DECISION-007) currently only runs the build/vet/test matrix on Ubuntu + Windows, not macOS. The "is my parent still alive" check is not portable by a single mechanism, though: on Unix (Linux/macOS), a process is automatically reparented (typically to PID 1 / launchd) the instant its original parent dies, so the simplest and fully portable-across-Unix signal is just polling `os.Getppid()` (Go stdlib, no platform-specific API needed) for a change from the PID observed at startup — no explicit liveness check required. Windows does **not** reparent orphans this way — `os.Getppid()` can keep returning the original (now-dead) parent PID indefinitely — so the Windows path needs an explicit liveness check on that original PPID (e.g. `OpenProcess`/`GetExitCodeProcess`, or the `github.com/mitchellh/go-ps`-style approach already informally precedented by this codebase's platform-conditional code in `internal/core/ffmpeg_prewarm.go`). The stdin-EOF-triggers-bounded-force-exit half of this option, by contrast, is naturally portable as-is (`os.Stdin` EOF detection is stdlib, not OS-specific).
+- **Leave as-is / gather more data passively:** the single clean CLI repro succeeded, so this may be intermittent (YouTube-side throttling, transient AV scan) rather than deterministic; wait for more occurrences (ideally with the enriched logging above already in place) before committing to a fix direction.
+
+### Decision
+
+Pending — awaiting human decision on which option(s) to pursue. The orphaned-process pile-up found during this investigation (5 concurrent `youtube-mcp.exe` instances, accumulated across repeated Claude Desktop reconnects) was manually cleaned up (`Stop-Process`) as an immediate mitigation, but no code change has been made yet for either the process-duplication issue or the timeout itself — both remain open pending the decision above.
