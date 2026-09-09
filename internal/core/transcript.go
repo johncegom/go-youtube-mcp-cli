@@ -234,6 +234,19 @@ const (
 	transcriptFetchSlowThreshold = 20 * time.Second
 )
 
+// timeoutOutputTailLen bounds how much of yt-dlp's captured stdout/stderr is
+// logged on a timeout (see BUG-008) — enough to show which phase yt-dlp was
+// in when killed, without dumping unbounded output into errors.log.
+const timeoutOutputTailLen = 2000
+
+// tailString returns the last n bytes of s (or all of s if shorter).
+func tailString(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[len(s)-n:]
+}
+
 // formatTranscriptFailureLog renders a transcript_fetch failure as a single
 // log line body (the LogDownloadError "msg" argument) — kept separate from
 // the file write so the formatting itself is unit-testable.
@@ -284,6 +297,10 @@ func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (segm
 	result, err := cmd.Run(runCtx, videoURL)
 	if err != nil {
 		if runCtx.Err() == context.DeadlineExceeded {
+			if result != nil {
+				LogDownloadError(fmt.Sprintf("transcript_fetch_timeout_output %s", videoID),
+					fmt.Sprintf("lang=%s stdout=%s stderr=%s", language, tailString(result.Stdout, timeoutOutputTailLen), tailString(result.Stderr, timeoutOutputTailLen)))
+			}
 			return nil, fmt.Errorf("transcript fetch timed out")
 		}
 		stderr := ""
