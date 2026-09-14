@@ -513,7 +513,7 @@ as:
 
 ---
 
-## BUG-008: `get_transcript` reliably times out at ~30s through Claude Desktop, but succeeds instantly via the CLI for the identical video — root cause unconfirmed
+## BUG-008: `get_transcript` reliably times out at ~30s through Claude Desktop, but succeeds instantly via the CLI for the identical video — fixed (yt-dlp format probe stalling in the Desktop-spawned environment)
 
 - **Status:** open
 - **Discovered:** user-reported (Claude Desktop MCP client) session, 2026-09-08/09, against `kjoQPn--F7A`. Investigated live via the actual per-connection MCP log (`%LOCALAPPDATA%\Claude\Logs\mcp-server-youtube-mcp.log`) and this project's own `errors.log` (`os.UserCacheDir()/youtube-mcp/errors.log`).
@@ -662,7 +662,7 @@ populated and useful.
 ### Third occurrence (2026-09-15, video `X0UI0O8YzJM`) — first useful capture, and a lead
 
 User re-ran the failing video through Claude Desktop right after the two
-actions above were live (the server binary in `goin` had just been
+actions above were live (the server binary in `go\bin` had just been
 rebuilt). `errors.log` at `2026-09-14T18:47:39Z` (01:47 local):
 
 - `transcript_fetch X0UI0O8YzJM: lang=en duration=34.378s category=timeout`
@@ -710,8 +710,33 @@ it was being killed in no longer exists; subtitle output is unchanged
 (verified byte-identical from the CLI). If the Desktop-spawned fetch
 still times out after this, the verbose capture will show the *next*
 stalling step, which would mean the environment stalls on more than this
-one request. Not yet verified against a live Claude Desktop run — needs
-the user to rebuild the `goin` binary and rerun the failing video.
+one request.
+
+### Verified (2026-09-15, Claude Desktop, video `X0UI0O8YzJM`)
+
+User rebuilt the `go\bin` binary from a branch carrying this change, fully
+quit and reopened Claude Desktop, and reran the same video that had timed
+out 12+ times over two days. Desktop's `mcp-server-youtube-mcp.log`: server
+restarted `2026-09-14T19:07:16Z` (02:07 local), `tools/call id=2` sent at
+`19:07:52.480Z`, result returned at `19:08:02.162Z` — **9.7s, transcript
+fetched.** `errors.log` has no new `transcript_fetch` entry after the
+`18:47:39Z` timeout from the run before the fix. User confirmed the
+transcript came through.
+
+**Resolution:** the timeout was yt-dlp's default format probe (`Testing
+format 616`, a live request to a googlevideo HLS URL) stalling in the
+Claude-Desktop-spawned process environment while completing in seconds
+from a CLI shell. Removing the probe from the subtitles-only fetch
+(`NoCheckFormats()`) removes the stalling step; the transcript path never
+needed it. *Why* that one request stalls only under Desktop is still not
+explained (same binary, same flags, same `JS runtimes: none`, `Proxy map:
+{}` — the remaining suspects are process-environment differences such as
+inherited network/proxy settings, in the same family as BUG-007's IPv6
+hang), but with the probe gone there is no reachable code path that makes
+the request, so this is closed rather than kept open on that question. The
+`Verbose()` + `pid=`/`killed=` logging from the earlier actions stays in
+place — it is what made this diagnosable and costs nothing on the success
+path.
 
 ---
 
