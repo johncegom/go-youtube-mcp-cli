@@ -659,6 +659,60 @@ against `X0UI0O8YzJM`, unaffected. Not yet verified against a live Claude
 Desktop timeout — needs the next repro to confirm the new fields are
 populated and useful.
 
+### Third occurrence (2026-09-15, video `X0UI0O8YzJM`) — first useful capture, and a lead
+
+User re-ran the failing video through Claude Desktop right after the two
+actions above were live (the server binary in `goin` had just been
+rebuilt). `errors.log` at `2026-09-14T18:47:39Z` (01:47 local):
+
+- `transcript_fetch X0UI0O8YzJM: lang=en duration=34.378s category=timeout`
+  — same ~31-35s signature.
+- `transcript_fetch_timeout_output X0UI0O8YzJM: lang=en pid=19056
+  killed=true stdout=... stderr=...` — **both new fields populated, and
+  the verbose capture is no longer empty.** `killed=true` rules out a
+  leaked/zombie subprocess on this path.
+- The captured stdout ends with:
+  ```
+  [youtube] X0UI0O8YzJM: Downloading m3u8 information
+  [info] X0UI0O8YzJM: Downloading subtitles: en
+  [info] Testing format 616
+  ```
+  i.e. yt-dlp got through the page fetch and the subtitle listing, then
+  was killed while **probing format 616** (YouTube's premium HLS video
+  format) with a live network request. That probe happens because
+  yt-dlp's default format selection still runs on a `--skip-download`
+  subtitle fetch and tests any format the extractor flags for testing.
+- stderr (verbose) shows `JS runtimes: none` and `Proxy map: {}`.
+
+Comparison from a CLI shell, same yt-dlp binary, same flags, same video:
+the identical `Testing format 616` line appears, the probe completes, and
+the subtitle file is written in ~7s. So the CLI/Desktop difference is
+**not** in what yt-dlp does — both environments also report
+`JS runtimes: none`, so a JS-runtime difference is ruled out — it's that
+this one googlevideo probe stalls in the Desktop-spawned environment (same
+flavour as BUG-007's hanging googlevideo request). Why it stalls there is
+still unconfirmed.
+
+Two CLI runs with one extra flag each removed the probe entirely
+(`Testing format` line absent, identical `sub.en.vtt` written, 5-6s):
+`--no-check-formats`, and `-f ba`. `--no-check-formats` is the safer of
+the two (it only disables format probes, which a subtitles-only fetch
+never needs; `-f ba` would fail on a video with no audio-only format).
+
+### Action taken (2026-09-15): `--no-check-formats` on the transcript fetch
+
+Per human decision, added `NoCheckFormats()` to the transcript-fetch
+command in `fetchSegmentsFromYtDlp` (`internal/core/transcript.go`) —
+**only** there, not on the shared `NewYtDlpCommand`, because the download
+paths in `download.go` rely on format checks to skip dead formats. Effect
+on the transcript path: yt-dlp no longer probes any format, so the step
+it was being killed in no longer exists; subtitle output is unchanged
+(verified byte-identical from the CLI). If the Desktop-spawned fetch
+still times out after this, the verbose capture will show the *next*
+stalling step, which would mean the environment stalls on more than this
+one request. Not yet verified against a live Claude Desktop run — needs
+the user to rebuild the `goin` binary and rerun the failing video.
+
 ---
 
 ## BUG-009: Auto-generated captions 429 on a separate, stricter YouTube quota than manual captions, with no retry/backoff in the tool

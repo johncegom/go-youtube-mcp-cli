@@ -300,8 +300,17 @@ func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (segm
 	// 429s from requesting many variants at once and produce the wrong
 	// transcript if a translated file gets picked over the real one.
 	outputTemplate := filepath.Join(tmpDir, "sub")
+	// NoCheckFormats: this is a subtitles-only fetch (SkipDownload), but
+	// yt-dlp's default format selection still runs and probes any format
+	// the extractor flags for testing (e.g. YouTube's premium HLS format
+	// 616 — "[info] Testing format 616") with a live network request. That
+	// probe is where the Claude-Desktop-spawned fetch was killed on timeout
+	// in BUG-008's third occurrence; it contributes nothing to the subtitle
+	// output, so skip it. Deliberately NOT on the shared NewYtDlpCommand —
+	// the download paths need format checks.
 	cmd := NewYtDlpCommand().
 		SkipDownload().
+		NoCheckFormats().
 		WriteAutoSubs().
 		WriteSubs().
 		SubLangs(language).
