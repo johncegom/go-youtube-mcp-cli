@@ -576,6 +576,89 @@ The investigation was also blocked from going further by an **instrumentation ga
 
 Pending — awaiting human decision on which option(s) to pursue. The orphaned-process pile-up found during this investigation (5 concurrent `youtube-mcp.exe` instances, accumulated across repeated Claude Desktop reconnects) was manually cleaned up (`Stop-Process`) as an immediate mitigation, but no code change has been made yet for either the process-duplication issue or the timeout itself — both remain open pending the decision above.
 
+### Second occurrence (2026-09-14/15, video `X0UI0O8YzJM`)
+
+User reported the same symptom via Claude Desktop for a different video
+(`X0UI0O8YzJM`). Investigated via this project's `errors.log` (`os.UserCacheDir()/youtube-mcp/errors.log`)
+and `%LOCALAPPDATA%\Claude\Logs\mcp-server-youtube-mcp.log`, after the
+`transcript_fetch_timeout_output` logging from option 1 above (commit
+0926a14) was already live.
+
+- `errors.log` shows 11 timeouts clustered 2026-09-14T15:14Z–16:48Z, all
+  ~31.0s (one 34.955s outlier), identical signature to the first
+  occurrence: `category=timeout err=transcript fetch timed out`.
+- The new `transcript_fetch_timeout_output` line is present on every one of
+  those, but **both `stdout=` and `stderr=` are empty on every occurrence**
+  — option 1's instrumentation is confirmed live and working, but there was
+  nothing captured to diagnose with. This points at option 2 (`Quiet()`/
+  `NoWarnings()` suppressing yt-dlp's phase output) as the next step, not
+  yet tried.
+- `mcp-server-youtube-mcp.log` confirms the MCP transport itself is not
+  hanging: the server returns a `tools/call` result to Claude Desktop at
+  almost exactly the same ~31s mark every time (e.g. request `id=2` at
+  16:40:13.740Z, response at 16:40:48.700Z). So the user-visible "timeout"
+  is our own `transcriptFetchTimeout` firing and being reported as a normal
+  (if unwelcome) tool result, not a dropped MCP connection. Interspersed
+  among the slow calls, a couple of `tools/call` requests in the same log
+  window returned in under a second (`id=6`, `id=9`) — not confirmed
+  whether those were transcript calls that happened to succeed fast or
+  calls to a different, cheaper tool (e.g. metadata); worth checking
+  `params`/tool name if the log is captured again.
+- Two `youtube-mcp.exe` processes (PIDs 16952, 18060, both started
+  2026-09-14 ~23:39-23:40 local) were still running at investigation time —
+  consistent with the orphan-process pile-up already noted above, not
+  independently resolved here (left running, not killed, since it wasn't
+  confirmed whether either was still a live Claude Desktop connection).
+- **Net new conclusion:** this rules out "video-specific" as an
+  explanation — same asymmetry (CLI instant, Claude-Desktop-spawned ~31s
+  timeout) now confirmed on two unrelated videos on two different days.
+  Root cause is still unconfirmed; option 2 (drop `Quiet()` to see yt-dlp's
+  own phase output on this path) is the most promising untried next step.
+- **User-reported pattern (unverified):** the user's impression across
+  their own repros is that this happens more often when the video has a
+  human-uploaded ("manual") transcript, rather than only an
+  auto-generated one. Not yet confirmed against the actual video set (both
+  known repro videos, `kjoQPn--F7A` and `X0UI0O8YzJM`, would need their
+  caption-track types checked to test this), but worth keeping in mind: the
+  fetch call always requests `WriteAutoSubs()` **and** `WriteSubs()`
+  together (`internal/core/transcript.go`), so a video offering a manual
+  track may make yt-dlp do extra track-listing/selection work under the
+  hood versus a video with only the auto track — a plausible mechanism for
+  this correlation, not confirmed.
+
+### Action taken (2026-09-15): switched to `Verbose()` for the next repro (option 2)
+
+Per human decision, replaced `.NoWarnings().Quiet()` with `.Verbose()` on
+the transcript-fetch `yt-dlp` command (`internal/core/transcript.go`,
+`fetchSegmentsFromYtDlp`) so the next timeout's captured `stdout`/`stderr`
+tail (already logged via the `transcript_fetch_timeout_output` line from
+the first occurrence's fix) should show yt-dlp's phase-by-phase progress
+instead of nothing. `go build ./...` and `go vet ./...` pass. Not yet
+verified against a live repro — needs the next Claude Desktop timeout to
+confirm the captured output is actually useful this time. If the extra
+verbose noise turns out to be a problem for the non-timeout `yt-dlp
+failed: %s` error path (which also reads `result.Stderr`), that's a
+follow-up to watch for, not addressed here.
+
+### Action taken (2026-09-15): PID + kill-confirmation logging (option 3)
+
+Per human decision, `fetchSegmentsFromYtDlp` (`internal/core/transcript.go`)
+now bypasses `Command.Run()` and instead calls `Command.BuildCommand()` +
+`Start()`/`Wait()` directly (mirroring the existing pattern in
+`DownloadVideoBlocking`/`DownloadAudioBlocking`, `internal/core/download.go`),
+since `go-ytdlp`'s `Run()` doesn't expose the underlying `*exec.Cmd` or its
+PID. On a timeout, the `transcript_fetch_timeout_output` log line now also
+includes `pid=<n>` (the subprocess PID) and `killed=<bool>` (`true` iff
+`exec.Cmd.ProcessState` is non-nil and `Exited()` returns true by the time
+`Wait()` returns) — this should confirm or rule out a leaked/zombie
+subprocess, which was one of the still-open explanations noted above and
+would also account for the separate stale-process pileup already observed.
+`go build ./...`, `go vet ./...`, `gofmt -l .` (clean), and `go test ./...`
+all pass; also re-verified end-to-end with a live CLI transcript fetch
+against `X0UI0O8YzJM`, unaffected. Not yet verified against a live Claude
+Desktop timeout — needs the next repro to confirm the new fields are
+populated and useful.
+
 ---
 
 ## BUG-009: Auto-generated captions 429 on a separate, stricter YouTube quota than manual captions, with no retry/backoff in the tool
