@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -299,31 +300,48 @@ func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (segm
 	// 429s from requesting many variants at once and produce the wrong
 	// transcript if a translated file gets picked over the real one.
 	outputTemplate := filepath.Join(tmpDir, "sub")
+	// NoCheckFormats: this is a subtitles-only fetch (SkipDownload), but
+	// yt-dlp's default format selection still runs and probes any format
+	// the extractor flags for testing (e.g. YouTube's premium HLS format
+	// 616 — "[info] Testing format 616") with a live network request. That
+	// probe is where the Claude-Desktop-spawned fetch was killed on timeout
+	// in BUG-008's third occurrence; it contributes nothing to the subtitle
+	// output, so skip it. Deliberately NOT on the shared NewYtDlpCommand —
+	// the download paths need format checks.
 	cmd := NewYtDlpCommand().
 		SkipDownload().
+		NoCheckFormats().
 		WriteAutoSubs().
 		WriteSubs().
 		SubLangs(language).
 		SubFormat("vtt").
 		Output(outputTemplate).
-		NoWarnings().
-		Quiet()
+		Verbose()
 
 	videoURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
-	result, err := cmd.Run(runCtx, videoURL)
-	if err != nil {
+
+	// Built and run by hand (instead of cmd.Run()) so the subprocess PID is
+	// available to log, and cmd.ProcessState after Wait() confirms whether
+	// the process actually terminated on timeout, rather than being left as
+	// a zombie/leaked child — see docs/BUGS.md BUG-008.
+	execCmd := cmd.BuildCommand(runCtx, videoURL)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	execCmd.Stdout = &stdoutBuf
+	execCmd.Stderr = &stderrBuf
+
+	if startErr := execCmd.Start(); startErr != nil {
+		return nil, startErr
+	}
+	pid := execCmd.Process.Pid
+	runErr := execCmd.Wait()
+	if runErr != nil {
 		if runCtx.Err() == context.DeadlineExceeded {
-			if result != nil {
-				LogDownloadError(fmt.Sprintf("transcript_fetch_timeout_output %s", videoID),
-					fmt.Sprintf("lang=%s stdout=%s stderr=%s", language, tailString(result.Stdout, timeoutOutputTailLen), tailString(result.Stderr, timeoutOutputTailLen)))
-			}
+			killed := execCmd.ProcessState != nil && execCmd.ProcessState.Exited()
+			LogDownloadError(fmt.Sprintf("transcript_fetch_timeout_output %s", videoID),
+				fmt.Sprintf("lang=%s pid=%d killed=%t stdout=%s stderr=%s", language, pid, killed, tailString(stdoutBuf.String(), timeoutOutputTailLen), tailString(stderrBuf.String(), timeoutOutputTailLen)))
 			return nil, fmt.Errorf("transcript fetch timed out")
 		}
-		stderr := ""
-		if result != nil {
-			stderr = result.Stderr
-		}
-		return nil, fmt.Errorf("yt-dlp failed: %s", firstNonEmpty(stderr, err.Error()))
+		return nil, fmt.Errorf("yt-dlp failed: %s", firstNonEmpty(stderrBuf.String(), runErr.Error()))
 	}
 
 	entries, err := os.ReadDir(tmpDir)

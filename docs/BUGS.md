@@ -513,7 +513,7 @@ as:
 
 ---
 
-## BUG-008: `get_transcript` reliably times out at ~30s through Claude Desktop, but succeeds instantly via the CLI for the identical video — root cause unconfirmed
+## BUG-008: `get_transcript` reliably times out at ~30s through Claude Desktop, but succeeds instantly via the CLI for the identical video — fixed (yt-dlp format probe stalling in the Desktop-spawned environment)
 
 - **Status:** open
 - **Discovered:** user-reported (Claude Desktop MCP client) session, 2026-09-08/09, against `kjoQPn--F7A`. Investigated live via the actual per-connection MCP log (`%LOCALAPPDATA%\Claude\Logs\mcp-server-youtube-mcp.log`) and this project's own `errors.log` (`os.UserCacheDir()/youtube-mcp/errors.log`).
@@ -575,6 +575,168 @@ The investigation was also blocked from going further by an **instrumentation ga
 ### Decision
 
 Pending — awaiting human decision on which option(s) to pursue. The orphaned-process pile-up found during this investigation (5 concurrent `youtube-mcp.exe` instances, accumulated across repeated Claude Desktop reconnects) was manually cleaned up (`Stop-Process`) as an immediate mitigation, but no code change has been made yet for either the process-duplication issue or the timeout itself — both remain open pending the decision above.
+
+### Second occurrence (2026-09-14/15, video `X0UI0O8YzJM`)
+
+User reported the same symptom via Claude Desktop for a different video
+(`X0UI0O8YzJM`). Investigated via this project's `errors.log` (`os.UserCacheDir()/youtube-mcp/errors.log`)
+and `%LOCALAPPDATA%\Claude\Logs\mcp-server-youtube-mcp.log`, after the
+`transcript_fetch_timeout_output` logging from option 1 above (commit
+0926a14) was already live.
+
+- `errors.log` shows 11 timeouts clustered 2026-09-14T15:14Z–16:48Z, all
+  ~31.0s (one 34.955s outlier), identical signature to the first
+  occurrence: `category=timeout err=transcript fetch timed out`.
+- The new `transcript_fetch_timeout_output` line is present on every one of
+  those, but **both `stdout=` and `stderr=` are empty on every occurrence**
+  — option 1's instrumentation is confirmed live and working, but there was
+  nothing captured to diagnose with. This points at option 2 (`Quiet()`/
+  `NoWarnings()` suppressing yt-dlp's phase output) as the next step, not
+  yet tried.
+- `mcp-server-youtube-mcp.log` confirms the MCP transport itself is not
+  hanging: the server returns a `tools/call` result to Claude Desktop at
+  almost exactly the same ~31s mark every time (e.g. request `id=2` at
+  16:40:13.740Z, response at 16:40:48.700Z). So the user-visible "timeout"
+  is our own `transcriptFetchTimeout` firing and being reported as a normal
+  (if unwelcome) tool result, not a dropped MCP connection. Interspersed
+  among the slow calls, a couple of `tools/call` requests in the same log
+  window returned in under a second (`id=6`, `id=9`) — not confirmed
+  whether those were transcript calls that happened to succeed fast or
+  calls to a different, cheaper tool (e.g. metadata); worth checking
+  `params`/tool name if the log is captured again.
+- Two `youtube-mcp.exe` processes (PIDs 16952, 18060, both started
+  2026-09-14 ~23:39-23:40 local) were still running at investigation time —
+  consistent with the orphan-process pile-up already noted above, not
+  independently resolved here (left running, not killed, since it wasn't
+  confirmed whether either was still a live Claude Desktop connection).
+- **Net new conclusion:** this rules out "video-specific" as an
+  explanation — same asymmetry (CLI instant, Claude-Desktop-spawned ~31s
+  timeout) now confirmed on two unrelated videos on two different days.
+  Root cause is still unconfirmed; option 2 (drop `Quiet()` to see yt-dlp's
+  own phase output on this path) is the most promising untried next step.
+- **User-reported pattern (unverified):** the user's impression across
+  their own repros is that this happens more often when the video has a
+  human-uploaded ("manual") transcript, rather than only an
+  auto-generated one. Not yet confirmed against the actual video set (both
+  known repro videos, `kjoQPn--F7A` and `X0UI0O8YzJM`, would need their
+  caption-track types checked to test this), but worth keeping in mind: the
+  fetch call always requests `WriteAutoSubs()` **and** `WriteSubs()`
+  together (`internal/core/transcript.go`), so a video offering a manual
+  track may make yt-dlp do extra track-listing/selection work under the
+  hood versus a video with only the auto track — a plausible mechanism for
+  this correlation, not confirmed.
+
+### Action taken (2026-09-15): switched to `Verbose()` for the next repro (option 2)
+
+Per human decision, replaced `.NoWarnings().Quiet()` with `.Verbose()` on
+the transcript-fetch `yt-dlp` command (`internal/core/transcript.go`,
+`fetchSegmentsFromYtDlp`) so the next timeout's captured `stdout`/`stderr`
+tail (already logged via the `transcript_fetch_timeout_output` line from
+the first occurrence's fix) should show yt-dlp's phase-by-phase progress
+instead of nothing. `go build ./...` and `go vet ./...` pass. Not yet
+verified against a live repro — needs the next Claude Desktop timeout to
+confirm the captured output is actually useful this time. If the extra
+verbose noise turns out to be a problem for the non-timeout `yt-dlp
+failed: %s` error path (which also reads `result.Stderr`), that's a
+follow-up to watch for, not addressed here.
+
+### Action taken (2026-09-15): PID + kill-confirmation logging (option 3)
+
+Per human decision, `fetchSegmentsFromYtDlp` (`internal/core/transcript.go`)
+now bypasses `Command.Run()` and instead calls `Command.BuildCommand()` +
+`Start()`/`Wait()` directly (mirroring the existing pattern in
+`DownloadVideoBlocking`/`DownloadAudioBlocking`, `internal/core/download.go`),
+since `go-ytdlp`'s `Run()` doesn't expose the underlying `*exec.Cmd` or its
+PID. On a timeout, the `transcript_fetch_timeout_output` log line now also
+includes `pid=<n>` (the subprocess PID) and `killed=<bool>` (`true` iff
+`exec.Cmd.ProcessState` is non-nil and `Exited()` returns true by the time
+`Wait()` returns) — this should confirm or rule out a leaked/zombie
+subprocess, which was one of the still-open explanations noted above and
+would also account for the separate stale-process pileup already observed.
+`go build ./...`, `go vet ./...`, `gofmt -l .` (clean), and `go test ./...`
+all pass; also re-verified end-to-end with a live CLI transcript fetch
+against `X0UI0O8YzJM`, unaffected. Not yet verified against a live Claude
+Desktop timeout — needs the next repro to confirm the new fields are
+populated and useful.
+
+### Third occurrence (2026-09-15, video `X0UI0O8YzJM`) — first useful capture, and a lead
+
+User re-ran the failing video through Claude Desktop right after the two
+actions above were live (the server binary in `go\bin` had just been
+rebuilt). `errors.log` at `2026-09-14T18:47:39Z` (01:47 local):
+
+- `transcript_fetch X0UI0O8YzJM: lang=en duration=34.378s category=timeout`
+  — same ~31-35s signature.
+- `transcript_fetch_timeout_output X0UI0O8YzJM: lang=en pid=19056
+  killed=true stdout=... stderr=...` — **both new fields populated, and
+  the verbose capture is no longer empty.** `killed=true` rules out a
+  leaked/zombie subprocess on this path.
+- The captured stdout ends with:
+  ```
+  [youtube] X0UI0O8YzJM: Downloading m3u8 information
+  [info] X0UI0O8YzJM: Downloading subtitles: en
+  [info] Testing format 616
+  ```
+  i.e. yt-dlp got through the page fetch and the subtitle listing, then
+  was killed while **probing format 616** (YouTube's premium HLS video
+  format) with a live network request. That probe happens because
+  yt-dlp's default format selection still runs on a `--skip-download`
+  subtitle fetch and tests any format the extractor flags for testing.
+- stderr (verbose) shows `JS runtimes: none` and `Proxy map: {}`.
+
+Comparison from a CLI shell, same yt-dlp binary, same flags, same video:
+the identical `Testing format 616` line appears, the probe completes, and
+the subtitle file is written in ~7s. So the CLI/Desktop difference is
+**not** in what yt-dlp does — both environments also report
+`JS runtimes: none`, so a JS-runtime difference is ruled out — it's that
+this one googlevideo probe stalls in the Desktop-spawned environment (same
+flavour as BUG-007's hanging googlevideo request). Why it stalls there is
+still unconfirmed.
+
+Two CLI runs with one extra flag each removed the probe entirely
+(`Testing format` line absent, identical `sub.en.vtt` written, 5-6s):
+`--no-check-formats`, and `-f ba`. `--no-check-formats` is the safer of
+the two (it only disables format probes, which a subtitles-only fetch
+never needs; `-f ba` would fail on a video with no audio-only format).
+
+### Action taken (2026-09-15): `--no-check-formats` on the transcript fetch
+
+Per human decision, added `NoCheckFormats()` to the transcript-fetch
+command in `fetchSegmentsFromYtDlp` (`internal/core/transcript.go`) —
+**only** there, not on the shared `NewYtDlpCommand`, because the download
+paths in `download.go` rely on format checks to skip dead formats. Effect
+on the transcript path: yt-dlp no longer probes any format, so the step
+it was being killed in no longer exists; subtitle output is unchanged
+(verified byte-identical from the CLI). If the Desktop-spawned fetch
+still times out after this, the verbose capture will show the *next*
+stalling step, which would mean the environment stalls on more than this
+one request.
+
+### Verified (2026-09-15, Claude Desktop, video `X0UI0O8YzJM`)
+
+User rebuilt the `go\bin` binary from a branch carrying this change, fully
+quit and reopened Claude Desktop, and reran the same video that had timed
+out 12+ times over two days. Desktop's `mcp-server-youtube-mcp.log`: server
+restarted `2026-09-14T19:07:16Z` (02:07 local), `tools/call id=2` sent at
+`19:07:52.480Z`, result returned at `19:08:02.162Z` — **9.7s, transcript
+fetched.** `errors.log` has no new `transcript_fetch` entry after the
+`18:47:39Z` timeout from the run before the fix. User confirmed the
+transcript came through.
+
+**Resolution:** the timeout was yt-dlp's default format probe (`Testing
+format 616`, a live request to a googlevideo HLS URL) stalling in the
+Claude-Desktop-spawned process environment while completing in seconds
+from a CLI shell. Removing the probe from the subtitles-only fetch
+(`NoCheckFormats()`) removes the stalling step; the transcript path never
+needed it. *Why* that one request stalls only under Desktop is still not
+explained (same binary, same flags, same `JS runtimes: none`, `Proxy map:
+{}` — the remaining suspects are process-environment differences such as
+inherited network/proxy settings, in the same family as BUG-007's IPv6
+hang), but with the probe gone there is no reachable code path that makes
+the request, so this is closed rather than kept open on that question. The
+`Verbose()` + `pid=`/`killed=` logging from the earlier actions stays in
+place — it is what made this diagnosable and costs nothing on the success
+path.
 
 ---
 
