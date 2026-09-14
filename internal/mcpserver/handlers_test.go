@@ -275,13 +275,13 @@ func TestNewServer_ToolCount(t *testing.T) {
 	// 8 canonical tools + 3 aliases (get_transcript_timestamps,
 	// get_video_metadata, search_in_transcript) + get_transcript_range,
 	// download_transcript_timed, get_download_status, list_downloads,
-	// get_chapters, list_playlist, and search_playlist = 17 — see
-	// tools.go's NewServer doc comment.
+	// get_chapters, list_playlist, search_playlist, and get_video_brief
+	// = 18 — see tools.go's NewServer doc comment.
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
-	if got, want := len(res.Tools), 17; got != want {
+	if got, want := len(res.Tools), 18; got != want {
 		names := make([]string, len(res.Tools))
 		for i, tl := range res.Tools {
 			names[i] = tl.Name

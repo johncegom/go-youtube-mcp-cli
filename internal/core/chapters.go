@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-// chapter is one entry in a video's chapter list (its native table of
+// Chapter is one entry in a video's chapter list (its native table of
 // contents), new in task 14 with no upstream TS equivalent.
-type chapter struct {
+type Chapter struct {
 	Title     string
 	StartSecs float64
 }
@@ -29,8 +29,8 @@ var (
 // least 3, and timestamps must be strictly ascending. If any rule fails,
 // returns nil — never a partial guess (docs/tasks/14-chapters/TASK.md,
 // 14.2).
-func parseChapters(description string) []chapter {
-	var candidates []chapter
+func parseChapters(description string) []Chapter {
+	var candidates []Chapter
 
 	for _, line := range strings.Split(description, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -70,7 +70,7 @@ func parseChapters(description string) []chapter {
 			continue
 		}
 
-		candidates = append(candidates, chapter{Title: title, StartSecs: secs})
+		candidates = append(candidates, Chapter{Title: title, StartSecs: secs})
 	}
 
 	if !validChapters(candidates) {
@@ -79,7 +79,7 @@ func parseChapters(description string) []chapter {
 	return candidates
 }
 
-func validChapters(chs []chapter) bool {
+func validChapters(chs []Chapter) bool {
 	if len(chs) < 3 {
 		return false
 	}
@@ -117,19 +117,19 @@ type playerResponseChapters struct {
 // validity gate — it's a best-effort tier: any decode error or absent
 // field yields nil, never a panic or an error
 // (docs/tasks/14-chapters/TASK.md, 14.4).
-func chaptersFromPlayerResponseJSON(raw []byte) []chapter {
+func chaptersFromPlayerResponseJSON(raw []byte) []Chapter {
 	var prc playerResponseChapters
 	if err := json.Unmarshal(raw, &prc); err != nil || len(prc.Chapters) == 0 {
 		return nil
 	}
 
-	chs := make([]chapter, 0, len(prc.Chapters))
+	chs := make([]Chapter, 0, len(prc.Chapters))
 	for _, cr := range prc.Chapters {
 		title := trimTitle(cr.Title.SimpleText)
 		if title == "" {
 			continue
 		}
-		chs = append(chs, chapter{
+		chs = append(chs, Chapter{
 			Title:     title,
 			StartSecs: float64(cr.TimeRangeStartMillis) / 1000,
 		})
@@ -145,13 +145,20 @@ func chaptersFromPlayerResponseJSON(raw []byte) []chapter {
 // in ytInitialPlayerResponse only if the description tier yields nothing
 // (docs/tasks/14-chapters/TASK.md, 14.4). A video with genuinely no
 // chapters yields a nil slice and a nil error — not an error.
-func FetchChapters(ctx context.Context, videoID string) ([]chapter, error) {
+func FetchChapters(ctx context.Context, videoID string) ([]Chapter, error) {
 	meta, prChapters, err := fetchVideoMetadataAndChapters(ctx, videoID)
 	if err != nil {
 		return nil, err
 	}
+	return chaptersFrom(meta, prChapters), nil
+}
+
+// chaptersFrom applies the tiering shared by FetchChapters and
+// FetchVideoBrief: the description tier wins when it yields chapters,
+// otherwise the player-response tier (which may itself be nil).
+func chaptersFrom(meta map[string]string, prChapters []Chapter) []Chapter {
 	if chs := parseChapters(meta["description"]); chs != nil {
-		return chs, nil
+		return chs
 	}
-	return prChapters, nil
+	return prChapters
 }

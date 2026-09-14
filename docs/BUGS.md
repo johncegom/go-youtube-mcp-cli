@@ -795,3 +795,75 @@ Fix now (human decision, this session): **Option 3 only** — a clearer,
 No retry/backoff logic was added (Option 2, declined) — this session's own
 repro data (still 429ing 3+ hours and many retries later) showed retries
 don't reliably outrun YouTube's cooldown for this specific throttle.
+
+---
+
+## BUG-010: `parseVtt` returns each auto-caption line ~3 times (rolling-cue carry blocks survive the dedupe)
+
+**Found:** 2026-09-15, during task 17's ground-truth capture
+(`docs/tasks/17-video-brief/TASK.md`), by running `parseVtt` on a real
+yt-dlp `--write-auto-subs` file for `dQw4w9WgXcQ`.
+
+**Reachability: yes.** Any video whose only English track is YouTube's
+auto-generated (ASR) one — the majority of videos — goes through this
+path on every `get_transcript`/`get_transcript_timed`/`get_transcript_range`
+/`search_transcript`/`download_transcript*` call and the CLI equivalents.
+Videos with an uploaded track are unaffected (yt-dlp prefers the uploaded
+track when both flags are passed, and uploaded VTTs are not rolling-style).
+
+### Symptom
+
+For an auto-caption video, the parsed transcript contains every line about
+three times, shifted by a few seconds each. Real `parseVtt` output on the
+captured sample (offset ms, duration ms, text):
+
+```
+ 18800 + 2990  "We're no strangers to"
+ 21790 +   10  "We're no strangers to"
+ 21800 + 4150  "We're no strangers to love. You know the rules and so do"
+ 25950 +   10  "love. You know the rules and so do"
+ 25960 + 3149  "love. You know the rules and so do I. I feel commitments from what I'm"
+```
+
+95 segments came out of a file whose actual caption content is ~30
+distinct lines. Word counts (and anything derived from them, e.g. task
+17's speaking-rate stat) are inflated ~3×, transcript text is ~3× longer
+than it should be, and `search_transcript` reports the same hit at
+several nearby timestamps.
+
+### Root cause
+
+YouTube's ASR captions, as converted to VTT by yt-dlp, are "rolling"
+two-line cues: each block repeats the previous line as its first line
+(context), then the new line with inline `<00:00:19.039><c> word</c>`
+word timings; between blocks there is a ~10 ms carry block whose text is
+the previous line alone. `parseVtt` (ported faithfully from the upstream
+TS) joins all lines of a block, strips tags, and dedupes on
+`offset|text` — but every one of these blocks has a *different* offset,
+so nothing is deduped. The upstream TS project has the same behavior;
+this is inherited, not introduced by the port.
+
+### Options
+
+1. **Content-aware parse for rolling cues (recommended, minimal):** when
+   the file is rolling-style (task 17's `detectCaptionKind` == auto, i.e.
+   inline word timings are present), take only the *last* non-empty line
+   of each block as the cue text, and drop a block whose resulting text
+   equals the previously kept segment's text (that's the 10 ms carry).
+   On the sample this yields exactly one segment per real line (`"We're
+   no strangers to"`, `"love. You know the rules and so do"`, `"I. I feel
+   commitments from what I'm"`, `"thinking"`, ...), with the offset of the
+   block that introduced the line. Uploaded VTTs are untouched.
+2. Request a non-rolling subtitle format from yt-dlp (`--sub-format
+   json3`/`srv3`) and write a second parser — bigger change, new format
+   fixtures, drops the TS-parity ground truth for the VTT parser.
+3. Leave as-is (upstream parity) and only document — rejected on the
+   merits: it makes every auto-caption transcript wrong for agents.
+
+### Decision
+
+Pending — awaiting human decision. Task 17 proceeds without changing
+`parseVtt`; its stats are computed on whatever `parseVtt` returns, so a
+fix here automatically corrects them. Until then, `get_video_brief`'s
+`Words`/`Speaking rate` on a `likely auto-generated` video should be read
+as ~3× too high.

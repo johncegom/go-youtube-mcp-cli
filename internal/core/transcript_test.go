@@ -338,3 +338,101 @@ func TestFormatTranscriptFailureLog(t *testing.T) {
 		})
 	}
 }
+
+// ── Caption kind (task 17) ───────────────────────────────────────────────
+//
+// Ground truth for detectCaptionKind: heads of real yt-dlp output captured
+// 2026-09-15 (`yt-dlp --skip-download --sub-langs en --sub-format vtt` with
+// `--write-auto-subs` vs `--write-subs`), trimmed to the first few blocks
+// and recorded verbatim. YouTube's auto (ASR) captions are "rolling" cues
+// carrying inline `<HH:MM:SS.mmm>` word timings; uploaded captions never
+// carry those. `<c.xxx>` styling tags alone are NOT a signal — uploaded
+// captions can carry them too (see vttFixture above, which has one).
+
+// dQw4w9WgXcQ, --write-auto-subs (auto/ASR track).
+const vttAutoHeadFixture = `WEBVTT
+Kind: captions
+Language: en
+
+00:00:00.320 --> 00:00:18.790 align:start position:0%
+ 
+[Music]
+
+00:00:18.790 --> 00:00:18.800 align:start position:0%
+ 
+ 
+
+00:00:18.800 --> 00:00:21.790 align:start position:0%
+ 
+We're<00:00:19.039><c> no</c><00:00:19.359><c> strangers</c><00:00:19.840><c> to</c>
+
+00:00:21.790 --> 00:00:21.800 align:start position:0%
+We're no strangers to
+ 
+`
+
+// dQw4w9WgXcQ, --write-subs (uploaded track).
+const vttUploadedHeadFixture = `WEBVTT
+Kind: captions
+Language: en
+
+00:00:01.360 --> 00:00:03.040
+[♪♪♪]
+
+00:00:18.640 --> 00:00:21.880
+♪ We're no strangers to love ♪
+
+00:00:22.640 --> 00:00:26.960
+♪ You know the rules
+and so do I ♪
+`
+
+// rfscVS0vtbw (freeCodeCamp "Learn Python"), uploaded track. Notably
+// --write-auto-subs alone returned this same byte-identical file, so the
+// yt-dlp flag is not a reliable signal of track kind — content is.
+const vttUploadedHeadFixture2 = `WEBVTT
+Kind: captions
+Language: en
+
+00:00:00.000 --> 00:00:04.080
+In this course, I'm going to teach you everything you need to know to get started programming
+
+00:00:04.080 --> 00:00:10.560
+in Python. Now, Python is one of the most popular programming languages out there. And it's by far
+`
+
+func TestDetectCaptionKind(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want CaptionKind
+	}{
+		{"auto (inline word timings)", vttAutoHeadFixture, CaptionAuto},
+		{"uploaded (lyrics)", vttUploadedHeadFixture, CaptionUploaded},
+		{"uploaded (freeCodeCamp)", vttUploadedHeadFixture2, CaptionUploaded},
+		{"uploaded with <c.xxx> styling only", vttFixture, CaptionUploaded},
+		{"empty", "", CaptionUnknown},
+		{"whitespace only", "  \n\n", CaptionUnknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := detectCaptionKind(tc.in); got != tc.want {
+				t.Errorf("detectCaptionKind() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func FuzzDetectCaptionKind(f *testing.F) {
+	f.Add(vttAutoHeadFixture)
+	f.Add(vttUploadedHeadFixture)
+	f.Add("")
+	f.Add("<00:00:01.000>")
+	f.Fuzz(func(t *testing.T, in string) {
+		switch got := detectCaptionKind(in); got {
+		case CaptionAuto, CaptionUploaded, CaptionUnknown:
+		default:
+			t.Fatalf("detectCaptionKind() = %q, not one of the three constants", got)
+		}
+	})
+}

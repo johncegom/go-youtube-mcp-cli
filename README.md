@@ -100,12 +100,15 @@ canonical one — both call the same handler):
 | `search_transcript` (alias `search_in_transcript`) | Find a keyword/phrase in the transcript, with timestamps |
 | `get_metadata` (alias `get_video_metadata`) | Title, channel, description, publish date, views, duration |
 | `get_chapters` | The video's chapters (timestamped table of contents), or a message if it has none |
+| `get_video_brief` | One call for a full evaluation: metadata + chapters + full timed transcript + transcript stats (caption kind, words, speaking rate, non-speech cues, longest gap); sections fail independently |
 | `download_video` | Start a background video download; returns a job ID |
 | `download_audio` | Start a background audio-only download; returns a job ID |
 | `get_download_status` | Check a job ID: running / done (with the real file path) / failed (with the error) |
 | `list_downloads` | List every download job known to the running server |
 | `download_transcript` | Save the transcript to a Markdown file |
 | `download_transcript_timed` | Save the transcript to a Markdown file, with timestamps |
+| `list_playlist` | List the videos in a playlist (title + ID, first 25) |
+| `search_playlist` | Search a keyword/phrase across every video's transcript in a playlist (first 25), grouped by video |
 
 The most reliable way to find `claude_desktop_config.json` is inside
 Claude Desktop itself: **Settings → Developer → Edit Config**. Use that
