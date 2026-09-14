@@ -48,6 +48,7 @@ this index) before pausing.
 | — | Out-of-band: test-coverage hardening (tiers 1-4) | [x] done | [docs/tasks/test-coverage-hardening/TASK.md](tasks/test-coverage-hardening/TASK.md) |
 | — | Out-of-band: `Taskfile.yml` dev-tooling wrapper | [x] done | [docs/tasks/taskfile/TASK.md](tasks/taskfile/TASK.md) |
 | 16 | Transcript-fetch observability logging | [x] done | [docs/tasks/16-transcript-observability/TASK.md](tasks/16-transcript-observability/TASK.md) |
+| 17 | Composite `get_video_brief` tool (metadata + chapters + timed transcript + stats, per-section failure) | [x] done | [docs/tasks/17-video-brief/TASK.md](tasks/17-video-brief/TASK.md) |
 
 ## Current status
 
@@ -178,13 +179,35 @@ intermittent timeout BUG-007 took a live investigation to root-cause. No new
 logging framework — reused the existing plain-text `errors.log`. See
 `docs/DECISIONS.md` DECISION-020.
 
+**Task 17 (`get_video_brief`, 2026-09-15)** — see
+`docs/tasks/17-video-brief/TASK.md` for full detail. Scoped from a
+brainstorm of "use-case-shaped" composite tools (one call for a whole
+agent workflow, rather than one call per primitive), filtered by whether
+the server does something between the calls the agent does badly. The
+new tool returns metadata + chapters + full timed transcript +
+server-computed transcript stats (caption kind auto/uploaded, words,
+speaking rate, non-speech cues, longest gap) in one call, with
+per-section partial failure (`isError` iff the transcript failed) —
+`docs/DECISIONS.md` DECISION-021. Thin orchestration over existing core
+functions (`internal/core/brief.go`); primitives unchanged; tool count 18.
+Caption kind is sniffed from VTT content (inline word timings) and cached
+with the segments. The task's ground-truth capture surfaced **BUG-010**
+(`parseVtt` returns each auto-caption line ~3×, reachable on every
+auto-caption-only video — pending decision), which also inflates the
+brief's word stats until fixed. BUG-008's pending diagnostic work was
+committed first on its own branch (PR #29) so both changes to
+`fetchSegmentsFromYtDlp` stack cleanly.
+
 ## Resume checklist for next session
 
 1. Read this index first (not the individual task files, unless you need one).
 2. Run `go build ./... && go vet ./... && go test ./...` to confirm the current state still holds.
 3. Skim `docs/RETRO.md` for any still-relevant advice before starting new work.
-4. **Phase 2 (tasks 11-15) is complete; task 16 (out-of-band observability
-   logging) is also done.** No task is currently approved to start next —
-   the next step is a new scoping pass with the human before any further
-   Phase 3+ work begins.
+4. **Phase 2 (tasks 11-15), task 16 (observability logging) and task 17
+   (`get_video_brief`) are done.** No task is currently approved to start
+   next — the next step is a new scoping pass with the human. Two open
+   decisions are waiting on the human: **BUG-010** (auto-caption
+   rolling-cue duplication in `parseVtt`, recommended fix option 1 in
+   `docs/BUGS.md`) and BUG-008's next live repro (PR #29's `Verbose()` +
+   PID logging needs a Claude Desktop timeout to confirm it's useful).
 5. After finishing a task: update **that task's `TASK.md`** with full detail first, then update this index's status column/checkbox for it, then pause and ask the human before starting the next task. If the task involved a deliberate design/scope tradeoff, log it in `docs/DECISIONS.md` too; if it surfaced a way-of-working lesson that generalizes beyond that one task, log it in `docs/RETRO.md`.

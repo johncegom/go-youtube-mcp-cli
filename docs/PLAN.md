@@ -165,6 +165,19 @@ Done + Test Plan, per the standing task-approval process. Summary:
   tools; per-video failures reported inline, never aborting the whole
   search. Depends on task 11's cache. Fixes weakness 5.
 
+## Phase 2 addendum — task 17 (scoped 2026-09-15)
+
+Phase 2's five tasks closed on 2026-09-02. One further task was scoped
+through the normal approval process afterwards, as DECISION-013 requires:
+
+- **Task 17 — Composite `get_video_brief` tool**
+  (`docs/tasks/17-video-brief/TASK.md`): a use-case-shaped tool returning
+  metadata + chapters + timed transcript + server-computed transcript
+  stats (caption kind, words, speaking rate, non-speech cues, longest gap)
+  in one call, with per-section partial failure. Thin orchestration over
+  existing core functions; primitives unchanged. Rationale and the
+  partial-failure contract: `docs/DECISIONS.md` DECISION-021.
+
 ## Phase 2 ground-truth note
 
 Phase 1's TDD rule derived ground truth by running the upstream TS code.

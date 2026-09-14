@@ -174,6 +174,7 @@ docs/DECISIONS.md      deliberate design/scope tradeoffs (not bugs)
   - *Pure* (unit-tested against ground truth): `parseVtt` (VTT → segments, with tag-stripping/entity-decoding/whitespace-collapse/dedupe), `transcriptText`, `transcriptTimed`, `searchSegments`, `formatSearchResult`, `TranscriptErrorText` (classifies a raw error into a user-facing message by substring match — timeout / missing captions / network / generic).
   - *I/O*: `fetchSegments` (runs `yt-dlp` into a temp dir to pull `.vtt` subtitles, parses the result), and the public entrypoints `GetTranscriptText`, `GetTranscriptTimed`, `SearchInTranscript`, `SaveTranscriptFile` (the last fetches transcript + metadata concurrently via two goroutines + a `sync.WaitGroup`, mirroring the TS `Promise.all`, then writes a Markdown file with a metadata header).
 - **`download.go`** — `qualityFormatMap`/`qualityFormat` (five quality presets, unknown-quality falls back to hd720), `resolveTitle` (metadata-based display+safe title, falls back to video ID on error), `StartVideoDownload`/`StartAudioDownload` (fire-and-forget goroutine detached from request `ctx`, used by the MCP path, mirrors TS `execFile(...).unref()`), `DownloadVideoBlocking`/`DownloadAudioBlocking` (blocking, uses `Command.BuildCommand` to get the raw `*exec.Cmd` and wires `Stdout`/`Stderr` directly to the process's own — used by the CLI path, mirrors TS `spawn(..., {stdio: "inherit"})`).
+- **`brief.go`** — task 17's composite: `FetchVideoBrief` runs the watch-page fetch (metadata + chapters) and the cache-backed transcript fetch concurrently and returns a `VideoBrief` whose sections fail independently (errors are fields, never a Go error); pure `computeTranscriptStats` (words, speaking rate, non-speech cues, longest gap). Caption kind (`CaptionKind`, `detectCaptionKind` in `transcript.go`) is sniffed from the raw VTT and cached alongside the segments. See `docs/DECISIONS.md` DECISION-021.
 - **`ffmpeg_prewarm.go`** — works around a `go-ytdlp` limitation (its ffmpeg download uses a hardcoded 30s HTTP timeout too short for the ~170MB archive on slower connections — see `docs/BUGS.md` BUG-002): downloads the archive ourselves with a longer timeout and drops the extracted binary at `go-ytdlp`'s own expected cache path, so its downloader finds it and never attempts its own (too-short) download. Implemented for `windows/amd64` and `linux/amd64`.
 
 ### `internal/cli` — cobra CLI, built (`cmd/youtube-cli`)
@@ -186,9 +187,13 @@ than hand-porting the original's bash/zsh completion scripts.
 ### `internal/mcpserver` — MCP stdio server, built (`cmd/youtube-mcp`)
 
 Built on the official `github.com/modelcontextprotocol/go-sdk`, registering
-11 tools via `mcp.AddTool` — 8 canonical tools plus 3 aliases
+18 tools via `mcp.AddTool` — 15 canonical tools plus 3 aliases
 (`get_transcript_timestamps`, `get_video_metadata`, `search_in_transcript`)
 that point at the same Go handler function as their canonical counterpart.
+The 11 upstream-parity tools were joined in Phase 2 and after by
+`get_transcript_range`, `get_chapters`, `get_download_status`,
+`list_downloads`, `list_playlist`, `search_playlist`, and the composite
+`get_video_brief` (task 17). `TestNewServer_ToolCount` pins the count.
 Every handler's `Out` type parameter is `any`, so responses are built by
 hand as `*mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{...}},
 IsError: bool}`, matching the upstream TS server's `{ content, isError }`

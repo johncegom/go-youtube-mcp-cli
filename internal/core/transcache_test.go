@@ -15,11 +15,11 @@ import (
 // re-fetch; the cap must evict the oldest entry and stay bounded; fetch
 // errors must never be cached; concurrent access must be race-free.
 
-func countingFetch(segs []transcriptSegment, err error) (func() ([]transcriptSegment, error), *int32) {
+func countingFetch(segs []transcriptSegment, err error) (func() (parsedTranscript, error), *int32) {
 	var calls int32
-	fetch := func() ([]transcriptSegment, error) {
+	fetch := func() (parsedTranscript, error) {
 		atomic.AddInt32(&calls, 1)
-		return segs, err
+		return parsedTranscript{Segments: segs}, err
 	}
 	return fetch, &calls
 }
@@ -36,12 +36,37 @@ func TestTranscriptCache_HitWithinTTL(t *testing.T) {
 		if err != nil {
 			t.Fatalf("getOrFetch() error = %v", err)
 		}
-		if len(got) != 1 || got[0].Text != "hi" {
+		if len(got.Segments) != 1 || got.Segments[0].Text != "hi" {
 			t.Errorf("getOrFetch() = %+v, want %+v", got, segs)
 		}
 	}
 	if n := atomic.LoadInt32(calls); n != 1 {
 		t.Errorf("fetch called %d times, want exactly 1 (cache hit should skip it)", n)
+	}
+}
+
+// TestTranscriptCache_HitPreservesCaptionKind: task 17 stores the caption
+// kind next to the segments precisely so a cache hit (where the raw VTT is
+// long gone) can still report it — see docs/tasks/17-video-brief/TASK.md 17.2.
+func TestTranscriptCache_HitPreservesCaptionKind(t *testing.T) {
+	now := time.Now()
+	c := newTranscriptCache(15*time.Minute, 32, func() time.Time { return now })
+	key := cacheKey{videoID: "abc", language: "en"}
+	fetch := func() (parsedTranscript, error) {
+		return parsedTranscript{Segments: []transcriptSegment{{Text: "hi"}}, CaptionKind: CaptionAuto}, nil
+	}
+	if _, err := c.getOrFetch(key, fetch); err != nil {
+		t.Fatalf("getOrFetch() error = %v", err)
+	}
+	got, err := c.getOrFetch(key, func() (parsedTranscript, error) {
+		t.Fatal("fetch called on what should be a cache hit")
+		return parsedTranscript{}, nil
+	})
+	if err != nil {
+		t.Fatalf("getOrFetch() error = %v", err)
+	}
+	if got.CaptionKind != CaptionAuto {
+		t.Errorf("cache hit CaptionKind = %q, want %q", got.CaptionKind, CaptionAuto)
 	}
 }
 
@@ -84,9 +109,9 @@ func TestTranscriptCache_ErrorNotCached(t *testing.T) {
 func TestTranscriptCache_CapEvictsOldest(t *testing.T) {
 	now := time.Now()
 	c := newTranscriptCache(15*time.Minute, 2, func() time.Time { return now })
-	fetchFor := func(id string) func() ([]transcriptSegment, error) {
-		return func() ([]transcriptSegment, error) {
-			return []transcriptSegment{{Text: id}}, nil
+	fetchFor := func(id string) func() (parsedTranscript, error) {
+		return func() (parsedTranscript, error) {
+			return parsedTranscript{Segments: []transcriptSegment{{Text: id}}}, nil
 		}
 	}
 
@@ -178,8 +203,10 @@ func TestTranscriptCache_ReAddingExistingKeyDoesNotReorder(t *testing.T) {
 	now := time.Now()
 	c := newTranscriptCache(1*time.Minute, 2, func() time.Time { return now })
 	v1, v2, v3 := cacheKey{videoID: "v1"}, cacheKey{videoID: "v2"}, cacheKey{videoID: "v3"}
-	fetchFor := func(id string) func() ([]transcriptSegment, error) {
-		return func() ([]transcriptSegment, error) { return []transcriptSegment{{Text: id}}, nil }
+	fetchFor := func(id string) func() (parsedTranscript, error) {
+		return func() (parsedTranscript, error) {
+			return parsedTranscript{Segments: []transcriptSegment{{Text: id}}}, nil
+		}
 	}
 
 	if _, err := c.getOrFetch(v1, fetchFor("v1")); err != nil {
@@ -229,8 +256,10 @@ func TestTranscriptCache_ExpiredEntryStillCountsTowardCap(t *testing.T) {
 	now := time.Now()
 	c := newTranscriptCache(1*time.Minute, 1, func() time.Time { return now })
 	v1, v2 := cacheKey{videoID: "v1"}, cacheKey{videoID: "v2"}
-	fetchFor := func(id string) func() ([]transcriptSegment, error) {
-		return func() ([]transcriptSegment, error) { return []transcriptSegment{{Text: id}}, nil }
+	fetchFor := func(id string) func() (parsedTranscript, error) {
+		return func() (parsedTranscript, error) {
+			return parsedTranscript{Segments: []transcriptSegment{{Text: id}}}, nil
+		}
 	}
 
 	if _, err := c.getOrFetch(v1, fetchFor("v1")); err != nil {

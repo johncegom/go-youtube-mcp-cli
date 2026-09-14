@@ -23,7 +23,7 @@ func TestParseChapters_RealChapteredDescription(t *testing.T) {
 		"12:10 Adding tests\n" +
 		"18:00 Wrap up\n"
 	got := parseChapters(desc)
-	want := []chapter{
+	want := []Chapter{
 		{Title: "Introduction", StartSecs: 0},
 		{Title: "Setting up the project", StartSecs: 90},
 		{Title: "Writing the first endpoint", StartSecs: 345},
@@ -41,7 +41,7 @@ func TestParseChapters_TitleThenTimestampOrder(t *testing.T) {
 		"Setup 1:30\n" +
 		"Conclusion 5:00\n"
 	got := parseChapters(desc)
-	want := []chapter{
+	want := []Chapter{
 		{Title: "Introduction", StartSecs: 0},
 		{Title: "Setup", StartSecs: 90},
 		{Title: "Conclusion", StartSecs: 300},
@@ -56,7 +56,7 @@ func TestParseChapters_HMSLongVideo(t *testing.T) {
 		"1:02:03 Deep dive\n" +
 		"2:15:30 Q&A\n"
 	got := parseChapters(desc)
-	want := []chapter{
+	want := []Chapter{
 		{Title: "Intro", StartSecs: 0},
 		{Title: "Deep dive", StartSecs: 3723},
 		{Title: "Q&A", StartSecs: 8130},
@@ -116,7 +116,7 @@ func TestParseChapters_TitleTrimming(t *testing.T) {
 		"0:30: Setup\n" +
 		"1:00 – – Topic\n"
 	got := parseChapters(desc)
-	want := []chapter{
+	want := []Chapter{
 		{Title: "Intro", StartSecs: 0},
 		{Title: "Setup", StartSecs: 30},
 		{Title: "Topic", StartSecs: 60},
@@ -133,7 +133,7 @@ func TestParseChapters_EmptyTitleLineSkipped(t *testing.T) {
 		"1:30 Setup\n" +
 		"5:00 Conclusion\n"
 	got := parseChapters(desc)
-	want := []chapter{
+	want := []Chapter{
 		{Title: "Intro", StartSecs: 0},
 		{Title: "Setup", StartSecs: 90},
 		{Title: "Conclusion", StartSecs: 300},
@@ -148,7 +148,7 @@ func TestParseChapters_EmptyDescription(t *testing.T) {
 	}
 }
 
-func assertChapters(t *testing.T, got, want []chapter) {
+func assertChapters(t *testing.T, got, want []Chapter) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Fatalf("parseChapters() = %v, want %v", got, want)
@@ -208,7 +208,7 @@ func TestChaptersFromPlayerResponseJSON_Valid(t *testing.T) {
 		]
 	}`)
 	got := chaptersFromPlayerResponseJSON(raw)
-	want := []chapter{
+	want := []Chapter{
 		{Title: "Intro", StartSecs: 0},
 		{Title: "Setup", StartSecs: 90},
 		{Title: "Wrap up", StartSecs: 300},
@@ -241,6 +241,6 @@ func TestChaptersFromPlayerResponseJSON_Absent(t *testing.T) {
 func TestChaptersFromPlayerResponseJSON_TooFewIgnoresValidityGate(t *testing.T) {
 	raw := []byte(`{"chapters": [{"title": {"simpleText": "Only one"}, "timeRangeStartMillis": 0}]}`)
 	got := chaptersFromPlayerResponseJSON(raw)
-	want := []chapter{{Title: "Only one", StartSecs: 0}}
+	want := []Chapter{{Title: "Only one", StartSecs: 0}}
 	assertChapters(t, got, want)
 }

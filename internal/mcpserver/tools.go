@@ -8,6 +8,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/johncegom/go-youtube-mcp-cli/internal/core"
@@ -170,6 +172,18 @@ func getMetadataHandler(ctx context.Context, _ *mcp.CallToolRequest, in metadata
 		return textResult(fmt.Sprintf("Failed to fetch metadata: %s", err.Error()), true), nil, nil
 	}
 
+	lines := metadataLines(meta)
+	text := "No metadata found."
+	if len(lines) > 0 {
+		text = strings.Join(lines, "\n")
+	}
+	return textResult(text, false), nil, nil
+}
+
+// metadataLines renders the non-empty metadata fields as "Label: value"
+// lines in get_metadata's fixed order (description last, since it's the
+// longest). Shared by get_metadata and get_video_brief.
+func metadataLines(meta map[string]string) []string {
 	var lines []string
 	if meta["title"] != "" {
 		lines = append(lines, "Title: "+meta["title"])
@@ -195,12 +209,94 @@ func getMetadataHandler(ctx context.Context, _ *mcp.CallToolRequest, in metadata
 	if meta["description"] != "" {
 		lines = append(lines, "Description: "+meta["description"])
 	}
+	return lines
+}
 
-	text := "No metadata found."
-	if len(lines) > 0 {
-		text = strings.Join(lines, "\n")
+// chapterLines renders chapters one "[H:MM:SS] Title" line each — the
+// get_chapters output format, reused verbatim inside get_video_brief.
+func chapterLines(chapters []core.Chapter) []string {
+	lines := make([]string, len(chapters))
+	for i, c := range chapters {
+		lines[i] = fmt.Sprintf("[%s] %s", core.FormatTimestamp(c.StartSecs), c.Title)
 	}
-	return textResult(text, false), nil, nil
+	return lines
+}
+
+// formatVideoBrief renders a core.VideoBrief as one text block, sections
+// separated by a blank line and ordered so a client that truncates still
+// shows the header: video ID, metadata, chapters, transcript stats, timed
+// transcript. A failed section is replaced by a single failure line;
+// chapters are omitted entirely when metadata failed (same fetch). The
+// returned isError is true iff the transcript section failed — see
+// docs/tasks/17-video-brief/TASK.md and docs/DECISIONS.md DECISION-021.
+func formatVideoBrief(videoID string, b core.VideoBrief) (string, bool) {
+	sections := []string{"Video: " + videoID}
+
+	if b.MetadataErr != nil {
+		sections[0] += "\nMetadata: Failed to fetch metadata: " + b.MetadataErr.Error()
+	} else {
+		if lines := metadataLines(b.Metadata); len(lines) > 0 {
+			sections[0] += "\n" + strings.Join(lines, "\n")
+		}
+		if len(b.Chapters) == 0 {
+			sections = append(sections, "No chapters found.")
+		} else {
+			sections = append(sections, "Chapters:\n"+strings.Join(chapterLines(b.Chapters), "\n"))
+		}
+	}
+
+	if b.TranscriptErr != nil {
+		sections = append(sections, "Transcript: "+core.TranscriptErrorText(videoID, b.TranscriptErr))
+		return strings.Join(sections, "\n\n"), true
+	}
+
+	sections = append(sections, "Transcript stats:\n"+strings.Join(statsLines(b.CaptionKind, b.Stats), "\n"))
+	sections = append(sections, "Transcript (timed):\n"+b.TranscriptTimed)
+	return strings.Join(sections, "\n\n"), false
+}
+
+func statsLines(kind core.CaptionKind, st core.TranscriptStats) []string {
+	captions := "unknown"
+	switch kind {
+	case core.CaptionAuto:
+		captions = "likely auto-generated"
+	case core.CaptionUploaded:
+		captions = "likely uploaded"
+	}
+
+	cues := fmt.Sprintf("Non-speech cues: %d", st.NonSpeechCues)
+	if len(st.NonSpeechBreakdown) > 0 {
+		keys := make([]string, 0, len(st.NonSpeechBreakdown))
+		for k := range st.NonSpeechBreakdown {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		parts := make([]string, len(keys))
+		for i, k := range keys {
+			parts[i] = fmt.Sprintf("%s x%d", k, st.NonSpeechBreakdown[k])
+		}
+		cues += " (" + strings.Join(parts, ", ") + ")"
+	}
+
+	return []string{
+		"Captions: " + captions,
+		fmt.Sprintf("Words: %d", st.Words),
+		fmt.Sprintf("Speaking rate: %d words/min", st.SpeakingRateWPM),
+		cues,
+		fmt.Sprintf("Longest gap: %ss at [%s]", strconv.FormatFloat(st.LongestGapSecs, 'f', -1, 64), core.FormatTimestamp(st.LongestGapAtSecs)),
+	}
+}
+
+// getVideoBriefHandler is the composite "everything an evaluation needs"
+// tool: metadata + chapters + timed transcript + stats in one call, with
+// per-section failure reporting (see formatVideoBrief).
+func getVideoBriefHandler(ctx context.Context, _ *mcp.CallToolRequest, in urlLangInput) (*mcp.CallToolResult, any, error) {
+	videoID := core.ExtractVideoID(in.URL)
+	if videoID == "" {
+		return invalidURLResult(in.URL), nil, nil
+	}
+	text, isErr := formatVideoBrief(videoID, core.FetchVideoBrief(ctx, videoID, in.Language))
+	return textResult(text, isErr), nil, nil
 }
 
 func getChaptersHandler(ctx context.Context, _ *mcp.CallToolRequest, in metadataInput) (*mcp.CallToolResult, any, error) {
@@ -215,11 +311,7 @@ func getChaptersHandler(ctx context.Context, _ *mcp.CallToolRequest, in metadata
 	if len(chapters) == 0 {
 		return textResult(fmt.Sprintf("No chapters found for video %s.", videoID), false), nil, nil
 	}
-	lines := make([]string, len(chapters))
-	for i, c := range chapters {
-		lines[i] = fmt.Sprintf("[%s] %s", core.FormatTimestamp(c.StartSecs), c.Title)
-	}
-	return textResult(strings.Join(lines, "\n"), false), nil, nil
+	return textResult(strings.Join(chapterLines(chapters), "\n"), false), nil, nil
 }
 
 func searchTranscriptHandler(ctx context.Context, _ *mcp.CallToolRequest, in searchInput) (*mcp.CallToolResult, any, error) {
@@ -375,7 +467,7 @@ func searchPlaylistHandler(ctx context.Context, _ *mcp.CallToolRequest, in playl
 
 // ── Server construction ──────────────────────────────────────────────────
 
-// NewServer builds the youtube-mcp-cli MCP server with all 17 tools
+// NewServer builds the youtube-mcp-cli MCP server with all 18 tools
 // registered (including the 3 alias pairs, which point at the same
 // handler function as their canonical tool).
 func NewServer(version string) *mcp.Server {
@@ -415,6 +507,11 @@ func NewServer(version string) *mcp.Server {
 		Name:        "get_chapters",
 		Description: "Fetches the video's chapters (timestamped table of contents), one '[H:MM:SS] Title' line per chapter, or a message if the video has no chapters.",
 	}, getChaptersHandler)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_video_brief",
+		Description: "One call for a full video evaluation: metadata, chapters, the full timed transcript, and transcript stats (caption kind: auto-generated vs uploaded; word count; speaking rate; non-speech cues like [Music]; longest silent gap). Use this instead of calling get_metadata + get_chapters + get_transcript_timed separately. For long videos or targeted questions prefer get_chapters + get_transcript_range instead. Sections fail independently — a failed section is replaced by a failure line and the rest is still returned; isError is set only when the transcript could not be fetched.",
+	}, getVideoBriefHandler)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_transcript",

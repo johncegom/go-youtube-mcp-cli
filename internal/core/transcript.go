@@ -21,6 +21,41 @@ type transcriptSegment struct {
 	Duration float64
 }
 
+// CaptionKind says whether a transcript came from YouTube's auto-generated
+// (ASR) track or an uploaded one — a signal for how much to trust it.
+type CaptionKind string
+
+const (
+	CaptionAuto     CaptionKind = "auto"
+	CaptionUploaded CaptionKind = "uploaded"
+	CaptionUnknown  CaptionKind = "unknown"
+)
+
+// parsedTranscript is what one yt-dlp subtitle fetch yields: the parsed
+// segments plus the caption kind sniffed from the raw VTT before parsing.
+type parsedTranscript struct {
+	Segments    []transcriptSegment
+	CaptionKind CaptionKind
+}
+
+// vttInlineTimingRe matches the inline word timings (`<00:00:19.039>`)
+// that YouTube's auto (ASR) captions carry and uploaded captions never do.
+// `<c>`/`<c.xxx>` styling tags are deliberately NOT part of the signal:
+// uploaded captions can carry those too.
+var vttInlineTimingRe = regexp.MustCompile(`<\d{2}:\d{2}:\d{2}\.\d{3}>`)
+
+// detectCaptionKind classifies raw VTT content by the presence of inline
+// word timings (auto) or their absence (uploaded); blank input is unknown.
+func detectCaptionKind(rawVTT string) CaptionKind {
+	if strings.TrimSpace(rawVTT) == "" {
+		return CaptionUnknown
+	}
+	if vttInlineTimingRe.MatchString(rawVTT) {
+		return CaptionAuto
+	}
+	return CaptionUploaded
+}
+
 var (
 	vttTimingRe  = regexp.MustCompile(`(\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}\.\d{3})`)
 	vttTagRe     = regexp.MustCompile(`<[^>]+>`)
@@ -231,14 +266,23 @@ func pickVttFile(files []string, language string) string {
 
 // ── Fetching (I/O) ────────────────────────────────────────────────────────
 
-// fetchSegments returns the parsed transcript for videoID+language, serving
-// a cached result when available (see transcache.go) instead of re-shelling
-// out to yt-dlp on every call.
-func fetchSegments(ctx context.Context, videoID, language string) ([]transcriptSegment, error) {
+// fetchTranscript returns the parsed transcript (segments + caption kind)
+// for videoID+language, serving a cached result when available (see
+// transcache.go) instead of re-shelling out to yt-dlp on every call.
+func fetchTranscript(ctx context.Context, videoID, language string) (parsedTranscript, error) {
 	key := cacheKey{videoID: videoID, language: language}
-	return defaultCache.getOrFetch(key, func() ([]transcriptSegment, error) {
+	return defaultCache.getOrFetch(key, func() (parsedTranscript, error) {
 		return fetchSegmentsFromYtDlp(ctx, videoID, language)
 	})
+}
+
+// fetchSegments is fetchTranscript for callers that only need the segments.
+func fetchSegments(ctx context.Context, videoID, language string) ([]transcriptSegment, error) {
+	tr, err := fetchTranscript(ctx, videoID, language)
+	if err != nil {
+		return nil, err
+	}
+	return tr.Segments, nil
 }
 
 // transcriptFetchTimeout bounds a single yt-dlp subtitle-fetch call.
@@ -271,7 +315,7 @@ func formatTranscriptFailureLog(language string, elapsed time.Duration, category
 	return fmt.Sprintf("lang=%s duration=%s category=%s err=%s", language, elapsed.Round(time.Millisecond), category, err.Error())
 }
 
-func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (segments []transcriptSegment, err error) {
+func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (tr parsedTranscript, err error) {
 	start := time.Now()
 	defer func() {
 		if err != nil {
@@ -281,12 +325,12 @@ func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (segm
 	}()
 
 	if err = EnsureYtDlp(ctx); err != nil {
-		return nil, err
+		return parsedTranscript{}, err
 	}
 
 	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("ytmcp-%s-*", videoID))
 	if err != nil {
-		return nil, err
+		return parsedTranscript{}, err
 	}
 	defer os.RemoveAll(tmpDir)
 
@@ -330,7 +374,7 @@ func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (segm
 	execCmd.Stderr = &stderrBuf
 
 	if startErr := execCmd.Start(); startErr != nil {
-		return nil, startErr
+		return parsedTranscript{}, startErr
 	}
 	pid := execCmd.Process.Pid
 	runErr := execCmd.Wait()
@@ -339,14 +383,14 @@ func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (segm
 			killed := execCmd.ProcessState != nil && execCmd.ProcessState.Exited()
 			LogDownloadError(fmt.Sprintf("transcript_fetch_timeout_output %s", videoID),
 				fmt.Sprintf("lang=%s pid=%d killed=%t stdout=%s stderr=%s", language, pid, killed, tailString(stdoutBuf.String(), timeoutOutputTailLen), tailString(stderrBuf.String(), timeoutOutputTailLen)))
-			return nil, fmt.Errorf("transcript fetch timed out")
+			return parsedTranscript{}, fmt.Errorf("transcript fetch timed out")
 		}
-		return nil, fmt.Errorf("yt-dlp failed: %s", firstNonEmpty(stderrBuf.String(), runErr.Error()))
+		return parsedTranscript{}, fmt.Errorf("yt-dlp failed: %s", firstNonEmpty(stderrBuf.String(), runErr.Error()))
 	}
 
 	entries, err := os.ReadDir(tmpDir)
 	if err != nil {
-		return nil, err
+		return parsedTranscript{}, err
 	}
 	names := make([]string, len(entries))
 	for i, e := range entries {
@@ -354,23 +398,24 @@ func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (segm
 	}
 	picked := pickVttFile(names, language)
 	if picked == "" {
-		return nil, fmt.Errorf("no transcript available for video %s. The video may not have captions in language %q", videoID, language)
+		return parsedTranscript{}, fmt.Errorf("no transcript available for video %s. The video may not have captions in language %q", videoID, language)
 	}
 	vttPath := filepath.Join(tmpDir, picked)
 
 	content, err := os.ReadFile(vttPath)
 	if err != nil {
-		return nil, err
+		return parsedTranscript{}, err
 	}
-	segments = parseVtt(string(content))
+	raw := string(content)
+	segments := parseVtt(raw)
 	if len(segments) == 0 {
-		return nil, fmt.Errorf("no transcript found for video %s", videoID)
+		return parsedTranscript{}, fmt.Errorf("no transcript found for video %s", videoID)
 	}
 	if elapsed := time.Since(start); elapsed > transcriptFetchSlowThreshold {
 		LogDownloadError(fmt.Sprintf("transcript_fetch_slow %s", videoID),
 			fmt.Sprintf("lang=%s duration=%s", language, elapsed.Round(time.Millisecond)))
 	}
-	return segments, nil
+	return parsedTranscript{Segments: segments, CaptionKind: detectCaptionKind(raw)}, nil
 }
 
 func normalizeLanguage(language string) string {

@@ -80,7 +80,7 @@ func FetchVideoMetadata(ctx context.Context, videoID string) (map[string]string,
 // fetchVideoMetadataAndChapters does the actual watch-page fetch, shared by
 // FetchVideoMetadata and FetchChapters so a get_chapters call only needs one
 // HTTP request, not two.
-func fetchVideoMetadataAndChapters(ctx context.Context, videoID string) (map[string]string, []chapter, error) {
+func fetchVideoMetadataAndChapters(ctx context.Context, videoID string) (map[string]string, []Chapter, error) {
 	pageURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
 
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -107,7 +107,7 @@ func fetchVideoMetadataAndChapters(ctx context.Context, videoID string) (map[str
 	html := string(body)
 
 	meta := map[string]string{}
-	var prChapters []chapter
+	var prChapters []Chapter
 
 	if m := ytInitialPlayerRe.FindStringSubmatch(html); m != nil {
 		raw := m[1]
