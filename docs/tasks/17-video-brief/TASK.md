@@ -168,7 +168,7 @@ go test ./internal/core/... -run FuzzDetectCaptionKind -fuzz=FuzzDetectCaptionKi
   expose an unexported type through an exported field, and the
   `formatVideoBrief` tests in `internal/mcpserver` need to build chapter
   fixtures. Mechanical rename in `internal/core` only; no behavior change.
-- **BUG-010 surfaced (not fixed here):** running `parseVtt` on the captured
+- **BUG-010 surfaced (not fixed here; fixed later, 2026-09-20 — see `docs/BUGS.md`):** running `parseVtt` on the captured
   auto-caption sample showed each line ~3× (rolling-cue carry blocks
   survive the `offset|text` dedupe). Reachable on every auto-caption-only
   video today, so it went to `docs/BUGS.md` for a decision rather than a

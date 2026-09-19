@@ -198,9 +198,9 @@ per-section partial failure (`isError` iff the transcript failed) —
 functions (`internal/core/brief.go`); primitives unchanged; tool count 18.
 Caption kind is sniffed from VTT content (inline word timings) and cached
 with the segments. The task's ground-truth capture surfaced **BUG-010**
-(`parseVtt` returns each auto-caption line ~3×, reachable on every
-auto-caption-only video — pending decision), which also inflates the
-brief's word stats until fixed. BUG-008's pending diagnostic work was
+(`parseVtt` returned each auto-caption line ~3×, reachable on every
+auto-caption-only video — fixed 2026-09-20, see `docs/BUGS.md`), which had
+also inflated the brief's word stats. BUG-008's pending diagnostic work was
 committed first on its own branch (PR #29) so both changes to
 `fetchSegmentsFromYtDlp` stack cleanly.
 
@@ -228,9 +228,8 @@ promoted to a task gets a row in the table above and a `TASK.md`.
    `captionTracks`, DECISION-022) and task 19 (same resolution for the
    download tools and `get_video_brief`; `search_playlist` intentionally left
    on `en`) are done.** No task is currently approved to start
-   next — the next step is a new scoping pass with the human. Two open
-   decisions are waiting on the human: **BUG-010** (auto-caption
-   rolling-cue duplication in `parseVtt`, recommended fix option 1 in
-   `docs/BUGS.md`) and BUG-008's next live repro (PR #29's `Verbose()` +
-   PID logging needs a Claude Desktop timeout to confirm it's useful).
+   next — the next step is a new scoping pass with the human. One open
+   item is waiting: BUG-008's next live repro (PR #29's `Verbose()` +
+   PID logging needs a Claude Desktop timeout to confirm it's useful). BUG-010 (auto-caption
+   rolling-cue duplication in `parseVtt`) is fixed as of 2026-09-20.
 5. After finishing a task: update **that task's `TASK.md`** with full detail first, then update this index's status column/checkbox for it, then pause and ask the human before starting the next task. If the task involved a deliberate design/scope tradeoff, log it in `docs/DECISIONS.md` too; if it surfaced a way-of-working lesson that generalizes beyond that one task, log it in `docs/RETRO.md`.

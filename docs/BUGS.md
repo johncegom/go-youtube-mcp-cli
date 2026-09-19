@@ -864,11 +864,45 @@ this is inherited, not introduced by the port.
 
 ### Decision
 
-Pending — awaiting human decision. Task 17 proceeds without changing
-`parseVtt`; its stats are computed on whatever `parseVtt` returns, so a
-fix here automatically corrects them. Until then, `get_video_brief`'s
-`Words`/`Speaking rate` on a `likely auto-generated` video should be read
-as ~3× too high.
+**Tracked (human decision, 2026-09-20): fix now with option 1** (content-aware
+parse of rolling cues), on branch `fix/bug-010-rolling-cue-dedupe`. Task 17
+proceeded without changing `parseVtt`; its stats are computed on whatever
+`parseVtt` returns, so this fix automatically corrects `get_video_brief`'s
+`Words`/`Speaking rate`/gap figures for auto-generated captions (until it
+lands they read ~3× too high). `parseVtt` is the single parse path for the
+CLI and every MCP tool, so one change covers all of them.
+
+**Fixed (2026-09-20).** `parseVtt` (`internal/core/transcript.go`) now
+detects rolling-cue files with `detectCaptionKind == CaptionAuto`; for those
+it takes the *last* non-empty line of each block as the cue text and drops a
+block whose text equals the previously kept segment's (the ~10 ms carry
+block). Uploaded captions take the original path unchanged (pinned by a
+characterization test that also passes on the pre-fix parser). Tests
+(`internal/core/vtt_rolling_test.go`) run against verbatim heads of two real
+captures (`testdata/asr_rolling_{en,vi}_head.vtt`, from `BqRhBq-_kgE` and
+`r8CppXSqVDU`) plus the task-17 `dQw4w9WgXcQ` head; on the English head the
+old parser returned 12 segments / 104 words for 6 spoken lines / 37 words.
+Verified against the two *full* real files with an independent awk count of
+typing lines: 158 segments / 1068 words vs 157 lines / 1067 words, and 413 /
+3651 vs 411 / 3649 — the excess is exactly the one-word typing lines
+("one.", "ra.", "minh.") that carry no inline timing tag and so escape the awk
+pattern; zero consecutive duplicates. Three fuzz targets
+(`internal/core/vtt_rolling_fuzz_test.go`) pin the properties: output
+invariants (clean non-empty text, finite times, no consecutive duplicates in a
+rolling parse, no more segments than timing lines); a differential test that
+any non-rolling input parses identically to a verbatim copy of the pre-fix
+parser (uploaded captions provably unchanged); and a metamorphic test that
+appending a carry block adds no segment. Each ran 45 s clean (~650k / ~990k /
+~375k executions), and a mutation check (treat every file as rolling; stop
+dropping carries) was caught by the intended targets. Live:
+`get_video_brief` on `r8CppXSqVDU` went from `Words: 10951` to `Words: 3651`;
+uploaded-caption output for `dQw4w9WgXcQ` is unchanged.
+
+Known, accepted limitation: a speaker line repeated verbatim back to back in
+a rolling file collapses to one segment (the carry rule cannot tell it from
+a carry block); rare, and the repeat carries no new information. The
+brief's `Longest gap` for continuous speech is now ~10 ms (the ASR
+leaves 10 ms between blocks); real pauses are unaffected.
 
 ---
 
