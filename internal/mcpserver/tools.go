@@ -20,14 +20,6 @@ import (
 
 type urlLangInput struct {
 	URL      string `json:"url" jsonschema:"The full YouTube URL or video ID (e.g. https://youtube.com/watch?v=abc123 or just abc123)"`
-	Language string `json:"language,omitempty" jsonschema:"Optional. Language code for the transcript (e.g. 'en', 'it'). Defaults to 'en'."`
-}
-
-// transcriptInput is urlLangInput for the tools whose omitted `language` is
-// resolved from the video (task 18); get_video_brief keeps urlLangInput and
-// its plain "en" default.
-type transcriptInput struct {
-	URL      string `json:"url" jsonschema:"The full YouTube URL or video ID (e.g. https://youtube.com/watch?v=abc123 or just abc123)"`
 	Language string `json:"language,omitempty" jsonschema:"Optional. Language code for the transcript (e.g. 'en', 'it'). Defaults to the video's spoken language when its captions identify one, otherwise 'en'."`
 }
 
@@ -69,7 +61,7 @@ type listDownloadsInput struct{}
 
 type downloadTranscriptInput struct {
 	URL       string `json:"url" jsonschema:"The full YouTube URL or video ID"`
-	Language  string `json:"language,omitempty" jsonschema:"Optional. Language code. Defaults to 'en'."`
+	Language  string `json:"language,omitempty" jsonschema:"Optional. Language code. Defaults to the video's spoken language when its captions identify one, otherwise 'en'."`
 	OutputDir string `json:"outputDir,omitempty" jsonschema:"Optional. Directory to save. Defaults to ~/Downloads."`
 }
 
@@ -80,7 +72,7 @@ type playlistInput struct {
 type playlistSearchInput struct {
 	URL      string `json:"url" jsonschema:"The full YouTube playlist URL or playlist ID"`
 	Query    string `json:"query" jsonschema:"The keyword or phrase to search for"`
-	Language string `json:"language,omitempty" jsonschema:"Optional. Language code. Defaults to 'en'."`
+	Language string `json:"language,omitempty" jsonschema:"Optional. Language code. Defaults to 'en' and is NOT auto-detected for playlists: for a non-English playlist pass its spoken language (e.g. 'vi') or its videos will be skipped."`
 }
 
 // ── Result helpers ────────────────────────────────────────────────────────
@@ -122,7 +114,7 @@ func invalidPlaylistURLResult(url string) *mcp.CallToolResult {
 // exactly, not the SDK's structured-output auto-marshaling (which would
 // kick in for any concrete Out type).
 
-func getTranscriptHandler(ctx context.Context, _ *mcp.CallToolRequest, in transcriptInput) (*mcp.CallToolResult, any, error) {
+func getTranscriptHandler(ctx context.Context, _ *mcp.CallToolRequest, in urlLangInput) (*mcp.CallToolResult, any, error) {
 	videoID := core.ExtractVideoID(in.URL)
 	if videoID == "" {
 		return invalidURLResult(in.URL), nil, nil
@@ -135,7 +127,7 @@ func getTranscriptHandler(ctx context.Context, _ *mcp.CallToolRequest, in transc
 	return textResult(withLanguageNote(core.LanguageNote(in.Language, lang), text), false), nil, nil
 }
 
-func getTranscriptTimedHandler(ctx context.Context, _ *mcp.CallToolRequest, in transcriptInput) (*mcp.CallToolResult, any, error) {
+func getTranscriptTimedHandler(ctx context.Context, _ *mcp.CallToolRequest, in urlLangInput) (*mcp.CallToolResult, any, error) {
 	videoID := core.ExtractVideoID(in.URL)
 	if videoID == "" {
 		return invalidURLResult(in.URL), nil, nil
@@ -272,7 +264,11 @@ func formatVideoBrief(videoID string, b core.VideoBrief) (string, bool) {
 		return strings.Join(sections, "\n\n"), true
 	}
 
-	sections = append(sections, "Transcript stats:\n"+strings.Join(statsLines(b.CaptionKind, b.Stats), "\n"))
+	stats := statsLines(b.CaptionKind, b.Stats)
+	if b.LanguageAutoDetected {
+		stats = append([]string{"Language: " + b.Language + " (auto-detected spoken language)"}, stats...)
+	}
+	sections = append(sections, "Transcript stats:\n"+strings.Join(stats, "\n"))
 	sections = append(sections, "Transcript (timed):\n"+b.TranscriptTimed)
 	return strings.Join(sections, "\n\n"), false
 }
@@ -433,11 +429,11 @@ func downloadTranscript(ctx context.Context, in downloadTranscriptInput, withTim
 		return textResult(err.Error(), true), nil, nil
 	}
 
-	filePath, err := core.SaveTranscriptFile(ctx, videoID, in.Language, outputDir, withTimestamps)
+	filePath, note, err := core.SaveTranscriptFileResolved(ctx, videoID, in.Language, outputDir, withTimestamps)
 	if err != nil {
 		return textResult(core.TranscriptErrorText(videoID, err), true), nil, nil
 	}
-	return textResult(fmt.Sprintf("Transcript saved to: %s", filePath), false), nil, nil
+	return textResult(withLanguageNote(note, fmt.Sprintf("Transcript saved to: %s", filePath)), false), nil, nil
 }
 
 func downloadTranscriptHandler(ctx context.Context, _ *mcp.CallToolRequest, in downloadTranscriptInput) (*mcp.CallToolResult, any, error) {

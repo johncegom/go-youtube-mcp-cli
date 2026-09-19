@@ -485,6 +485,10 @@ func SearchInTranscript(ctx context.Context, videoID, query, language string, co
 	return formatSearchResultWithContext(videoID, query, matchCount, blocks), nil
 }
 
+// fetchMetadataForSave is FetchVideoMetadata, as a variable so tests can run
+// SaveTranscriptFile without the network.
+var fetchMetadataForSave = FetchVideoMetadata
+
 // SaveTranscriptFile fetches the transcript and metadata concurrently and
 // writes a Markdown file (with a metadata header) into outputDir, returning
 // the written file's path.
@@ -505,7 +509,7 @@ func SaveTranscriptFile(ctx context.Context, videoID, language, outputDir string
 	}()
 	go func() {
 		defer wg.Done()
-		if m, err := FetchVideoMetadata(ctx, videoID); err == nil {
+		if m, err := fetchMetadataForSave(ctx, videoID); err == nil {
 			meta = m
 		}
 	}()
@@ -543,6 +547,9 @@ func SaveTranscriptFile(ctx context.Context, videoID, language, outputDir string
 	if meta["duration"] != "" {
 		metaLines = append(metaLines, "**Duration:** "+meta["duration"])
 	}
+	if line := languageMetaLine(language); line != "" {
+		metaLines = append(metaLines, line)
+	}
 	metaLines = append(metaLines, "**Video ID:** "+videoID)
 	metaLines = append(metaLines, fmt.Sprintf("**URL:** https://www.youtube.com/watch?v=%s", videoID))
 
@@ -552,13 +559,7 @@ func SaveTranscriptFile(ctx context.Context, videoID, language, outputDir string
 	}
 	md := fmt.Sprintf("# Transcript - %s\n\n%s\n\n---\n\n%s\n", titleFromMeta, strings.Join(metaLines, "\n"), strings.Join(lines, sep))
 
-	filename := safeTitle
-	if withTimestamps {
-		filename += "_timed"
-	}
-	filename += ".md"
-
-	fp := filepath.Join(outputDir, filename)
+	fp := filepath.Join(outputDir, transcriptFilename(safeTitle, language, withTimestamps))
 	if err := os.WriteFile(fp, []byte(md), 0o644); err != nil {
 		return "", err
 	}

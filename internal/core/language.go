@@ -153,3 +153,55 @@ func LanguageNote(requested, resolved string) string {
 	}
 	return "language: " + resolved + " (auto-detected spoken language)"
 }
+
+// sanitizeLanguageForFilename makes a language code safe to embed in a
+// filename: anything outside [A-Za-z0-9_-] becomes "_". The language is an
+// MCP-controlled argument, so without this a value like "../../x" would let
+// SaveTranscriptFile write outside the output directory.
+func sanitizeLanguageForFilename(language string) string {
+	var b strings.Builder
+	for _, r := range language {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
+}
+
+// transcriptFilename is the saved transcript's file name:
+// <title>_<lang>[_timed].md, for every language including "en", so two
+// languages of one video never overwrite each other.
+func transcriptFilename(safeTitle, language string, timed bool) string {
+	name := safeTitle + "_" + sanitizeLanguageForFilename(language)
+	if timed {
+		name += "_timed"
+	}
+	return name + ".md"
+}
+
+// languageMetaLine is the saved file's header line naming its language, or
+// "" for "en" so an English file's body is unchanged.
+func languageMetaLine(language string) string {
+	if language == "en" {
+		return ""
+	}
+	return "**Language:** " + language
+}
+
+// SaveTranscriptFileResolved is the save path with the language handled: it
+// resolves an omitted requested language (see ResolveLanguage), saves the
+// transcript in that language, and returns the auto-detected-language note
+// (see LanguageNote; "" when there is nothing to say) for the caller to show
+// outside the file. The MCP download tools and the CLI's `transcript --save`
+// both call it, so the resolve/save/note composition lives in one place.
+func SaveTranscriptFileResolved(ctx context.Context, videoID, requested, outputDir string, withTimestamps bool) (path, note string, err error) {
+	language := ResolveLanguage(ctx, videoID, requested)
+	path, err = SaveTranscriptFile(ctx, videoID, language, outputDir, withTimestamps)
+	if err != nil {
+		return "", "", err
+	}
+	return path, LanguageNote(requested, language), nil
+}

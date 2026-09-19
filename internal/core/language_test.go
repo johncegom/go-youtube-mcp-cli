@@ -3,6 +3,9 @@ package core
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -219,4 +222,292 @@ func TestResolveLanguage_SharesCacheEntryWithExplicitLanguage(t *testing.T) {
 	if auto != "xin chào" || explicit != auto {
 		t.Errorf("auto = %q, explicit = %q, want both %q", auto, explicit, "xin chào")
 	}
+}
+
+// ── task 19: save filename/header, brief transcript ──────────────────────
+
+// The filename rule is the human's decision (docs/tasks/19-language-
+// resolution-remaining-tools/TASK.md): every save is named
+// <title>_<lang>[_timed].md, including "en". The language comes from an
+// MCP-controlled argument, so it is restricted to [A-Za-z0-9_-]. There is no
+// upstream equivalent; ground truth is that spec.
+func TestSanitizeLanguageForFilename(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"en", "en"},
+		{"vi", "vi"},
+		{"zh-Hans", "zh-Hans"},
+		{"pt_BR", "pt_BR"},
+		{"../../x", "______x"},
+		{`a/b\c`, "a_b_c"},
+		{"en US", "en_US"},
+		{"vi\x00", "vi_"},
+	}
+	for _, tc := range cases {
+		if got := sanitizeLanguageForFilename(tc.in); got != tc.want {
+			t.Errorf("sanitizeLanguageForFilename(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestTranscriptFilename(t *testing.T) {
+	cases := []struct {
+		safeTitle, language string
+		timed               bool
+		want                string
+	}{
+		{"My_Video", "en", false, "My_Video_en.md"},
+		{"My_Video", "en", true, "My_Video_en_timed.md"},
+		{"My_Video", "vi", false, "My_Video_vi.md"},
+		{"My_Video", "vi", true, "My_Video_vi_timed.md"},
+		{"My_Video", "../../x", false, "My_Video_______x.md"},
+	}
+	for _, tc := range cases {
+		got := transcriptFilename(tc.safeTitle, tc.language, tc.timed)
+		if got != tc.want {
+			t.Errorf("transcriptFilename(%q, %q, %v) = %q, want %q", tc.safeTitle, tc.language, tc.timed, got, tc.want)
+		}
+		if strings.ContainsAny(got, `/\`) {
+			t.Errorf("transcriptFilename(%q, %q, %v) = %q contains a path separator", tc.safeTitle, tc.language, tc.timed, got)
+		}
+	}
+}
+
+// A saved file gets a "**Language:**" header line only when the language
+// used is not "en" (auto-detected or explicit), so an English file's body is
+// byte-identical to before task 19.
+func TestLanguageMetaLine(t *testing.T) {
+	if got := languageMetaLine("en"); got != "" {
+		t.Errorf("languageMetaLine(en) = %q, want empty", got)
+	}
+	if got, want := languageMetaLine("vi"), "**Language:** vi"; got != want {
+		t.Errorf("languageMetaLine(vi) = %q, want %q", got, want)
+	}
+}
+
+// fetchBriefTranscript resolves the language itself (it runs inside the
+// brief's transcript goroutine, task 19): an omitted language is resolved,
+// an explicit one is untouched with no lookup, a failed lookup keeps "en".
+// The transcript cache is seeded so no yt-dlp run happens.
+func seedTranscript(t *testing.T, videoID, language, text string) {
+	t.Helper()
+	key := cacheKey{videoID: videoID, language: language}
+	defaultCache.mu.Lock()
+	defaultCache.set(key, parsedTranscript{Segments: []transcriptSegment{{Text: text, Offset: 0, Duration: 1000}}})
+	defaultCache.mu.Unlock()
+	t.Cleanup(func() {
+		defaultCache.mu.Lock()
+		delete(defaultCache.entries, key)
+		defaultCache.mu.Unlock()
+	})
+}
+
+func TestFetchBriefTranscript(t *testing.T) {
+	var calls int32
+	withStubbedLookup(t, func(ctx context.Context, videoID string) (string, error) {
+		atomic.AddInt32(&calls, 1)
+		return "vi", nil
+	})
+	const videoID = "task19brief"
+	seedTranscript(t, videoID, "vi", "xin chào")
+	seedTranscript(t, videoID, "en", "hello")
+	ctx := context.Background()
+
+	tr, lang, auto, err := fetchBriefTranscript(ctx, videoID, "")
+	if err != nil || lang != "vi" || !auto || tr.Segments[0].Text != "xin chào" {
+		t.Errorf("omitted: got (%q, lang=%q, auto=%v, err=%v), want (xin chào, vi, true, nil)", tr.Segments[0].Text, lang, auto, err)
+	}
+
+	before := atomic.LoadInt32(&calls)
+	tr, lang, auto, err = fetchBriefTranscript(ctx, videoID, "en")
+	if err != nil || lang != "en" || auto || tr.Segments[0].Text != "hello" {
+		t.Errorf("explicit en: got (%q, lang=%q, auto=%v, err=%v), want (hello, en, false, nil)", tr.Segments[0].Text, lang, auto, err)
+	}
+	tr, lang, auto, err = fetchBriefTranscript(ctx, videoID, "vi")
+	if err != nil || lang != "vi" || auto || tr.Segments[0].Text != "xin chào" {
+		t.Errorf("explicit vi: got (%q, lang=%q, auto=%v, err=%v), want (xin chào, vi, false, nil)", tr.Segments[0].Text, lang, auto, err)
+	}
+	if n := atomic.LoadInt32(&calls); n != before {
+		t.Errorf("lookup called %d more times for explicit languages, want 0", n-before)
+	}
+}
+
+func TestFetchBriefTranscript_LookupFailureKeepsEn(t *testing.T) {
+	withStubbedLookup(t, func(ctx context.Context, videoID string) (string, error) {
+		return "", errors.New("page fetch failed")
+	})
+	const videoID = "task19brieffail"
+	seedTranscript(t, videoID, "en", "hello")
+	tr, lang, auto, err := fetchBriefTranscript(context.Background(), videoID, "")
+	if err != nil || lang != "en" || auto || tr.Segments[0].Text != "hello" {
+		t.Errorf("got (%q, lang=%q, auto=%v, err=%v), want (hello, en, false, nil)", tr.Segments[0].Text, lang, auto, err)
+	}
+}
+
+// ── task 19: the save path end to end, no network ────────────────────────
+//
+// SaveTranscriptFileResolved is resolve -> save -> note in one place (the
+// MCP handler and the CLI both call it). The transcript cache is seeded, the
+// language lookup stubbed, and the metadata fetch stubbed, so the whole path
+// runs hermetically against a temp directory.
+
+func withStubbedMetadata(t *testing.T) {
+	t.Helper()
+	old := fetchMetadataForSave
+	fetchMetadataForSave = func(ctx context.Context, videoID string) (map[string]string, error) {
+		return map[string]string{"title": "My Video", "channel": "C"}, nil
+	}
+	t.Cleanup(func() { fetchMetadataForSave = old })
+}
+
+func TestSaveTranscriptFileResolved(t *testing.T) {
+	cases := []struct {
+		name         string
+		requested    string
+		lookupLang   string
+		lookupErr    error
+		wantFile     string
+		wantNote     string
+		wantLangLine bool
+		wantLookups  int32
+	}{
+		{"omitted, resolves to vi", "", "vi", nil, "My Video_vi.md", "language: vi (auto-detected spoken language)", true, 1},
+		{"omitted, resolves to en", "", "en", nil, "My Video_en.md", "", false, 1},
+		{"explicit vi never looks up", "vi", "ja", nil, "My Video_vi.md", "", true, 0},
+		{"explicit en never looks up", "en", "vi", nil, "My Video_en.md", "", false, 0},
+		{"lookup error keeps en, no note", "", "", errors.New("page fetch failed"), "My Video_en.md", "", false, 1},
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var lookups int32
+			withStubbedLookup(t, func(ctx context.Context, videoID string) (string, error) {
+				atomic.AddInt32(&lookups, 1)
+				return tc.lookupLang, tc.lookupErr
+			})
+			withStubbedMetadata(t)
+			videoID := "task19save" + string(rune('a'+i))
+			for _, lang := range []string{"en", "vi", "ja"} {
+				seedTranscript(t, videoID, lang, "hello "+lang)
+			}
+			dir := t.TempDir()
+
+			path, note, err := SaveTranscriptFileResolved(context.Background(), videoID, tc.requested, dir, false)
+			if err != nil {
+				t.Fatalf("SaveTranscriptFileResolved() error = %v", err)
+			}
+			if got := filepath.Base(path); got != tc.wantFile {
+				t.Errorf("file = %q, want %q", got, tc.wantFile)
+			}
+			if note != tc.wantNote {
+				t.Errorf("note = %q, want %q", note, tc.wantNote)
+			}
+			if n := atomic.LoadInt32(&lookups); n != tc.wantLookups {
+				t.Errorf("lookups = %d, want %d", n, tc.wantLookups)
+			}
+			body, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Contains(string(body), "**Language:**"); got != tc.wantLangLine {
+				t.Errorf("header has **Language:** line = %v, want %v\n%s", got, tc.wantLangLine, body)
+			}
+		})
+	}
+}
+
+// A hostile language argument must never place the file outside outputDir.
+func TestSaveTranscriptFileResolved_HostileLanguageStaysInsideOutputDir(t *testing.T) {
+	withStubbedLookup(t, func(ctx context.Context, videoID string) (string, error) { return "en", nil })
+	withStubbedMetadata(t)
+	const videoID = "task19hostile"
+	seedTranscript(t, videoID, "../../x", "hello")
+	dir := t.TempDir()
+
+	path, _, err := SaveTranscriptFileResolved(context.Background(), videoID, "../../x", dir, true)
+	if err != nil {
+		t.Fatalf("SaveTranscriptFileResolved() error = %v", err)
+	}
+	if got := filepath.Dir(path); got != dir {
+		t.Errorf("file written in %q, want exactly %q", got, dir)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("saved file missing: %v", err)
+	}
+}
+
+// Brief, omitted language whose lookup succeeds and returns "en": nothing to
+// announce (task 19, clause "omitted+en -> none").
+func TestFetchBriefTranscript_OmittedResolvesToEnIsSilent(t *testing.T) {
+	withStubbedLookup(t, func(ctx context.Context, videoID string) (string, error) { return "en", nil })
+	const videoID = "task19briefen"
+	seedTranscript(t, videoID, "en", "hello")
+	tr, lang, auto, err := fetchBriefTranscript(context.Background(), videoID, "")
+	if err != nil || lang != "en" || auto || tr.Segments[0].Text != "hello" {
+		t.Errorf("got (%q, lang=%q, auto=%v, err=%v), want (hello, en, false, nil)", tr.Segments[0].Text, lang, auto, err)
+	}
+}
+
+// FetchVideoBrief's sections fail independently (docs/tasks/17-video-brief):
+// the metadata/chapters goroutine and the transcript goroutine write
+// disjoint fields, and the language resolution now runs inside the
+// transcript goroutine (task 19), so neither a failed resolve nor a failed
+// transcript may disturb the metadata section, and vice versa. Both network
+// legs are stubbed through fetchMetadataForBrief / fetchTranscriptForBrief.
+func withStubbedBrief(t *testing.T, meta func() (map[string]string, []Chapter, error), tr func() (parsedTranscript, error)) {
+	t.Helper()
+	oldMeta, oldTr := fetchMetadataForBrief, fetchTranscriptForBrief
+	fetchMetadataForBrief = func(ctx context.Context, videoID string) (map[string]string, []Chapter, error) { return meta() }
+	fetchTranscriptForBrief = func(ctx context.Context, videoID, language string) (parsedTranscript, error) { return tr() }
+	t.Cleanup(func() { fetchMetadataForBrief, fetchTranscriptForBrief = oldMeta, oldTr })
+}
+
+func TestFetchVideoBrief_SectionsFailIndependently(t *testing.T) {
+	okMeta := func() (map[string]string, []Chapter, error) {
+		return map[string]string{"title": "T", "description": "0:00 Intro\n0:20 Middle\n0:40 End"}, nil, nil
+	}
+	okTranscript := func() (parsedTranscript, error) {
+		return parsedTranscript{Segments: []transcriptSegment{{Text: "hello world", Offset: 0, Duration: 1000}}}, nil
+	}
+
+	t.Run("resolve fails and transcript fails: metadata intact", func(t *testing.T) {
+		withStubbedLookup(t, func(ctx context.Context, videoID string) (string, error) { return "", errors.New("page fetch failed") })
+		withStubbedBrief(t, okMeta, func() (parsedTranscript, error) { return parsedTranscript{}, errors.New("yt-dlp failed") })
+		b := FetchVideoBrief(context.Background(), "vid", "")
+		if b.TranscriptErr == nil {
+			t.Error("TranscriptErr = nil, want the transcript failure")
+		}
+		if b.MetadataErr != nil || b.Metadata["title"] != "T" || len(b.Chapters) != 3 {
+			t.Errorf("metadata section disturbed: err=%v meta=%v chapters=%d", b.MetadataErr, b.Metadata, len(b.Chapters))
+		}
+		if b.Language != "" || b.LanguageAutoDetected {
+			t.Errorf("language fields set on a failed transcript: %q, %v", b.Language, b.LanguageAutoDetected)
+		}
+	})
+
+	t.Run("metadata fails: transcript and language intact", func(t *testing.T) {
+		withStubbedLookup(t, func(ctx context.Context, videoID string) (string, error) { return "vi", nil })
+		withStubbedBrief(t, func() (map[string]string, []Chapter, error) { return nil, nil, errors.New("page fetch failed") }, okTranscript)
+		b := FetchVideoBrief(context.Background(), "vid", "")
+		if b.MetadataErr == nil {
+			t.Error("MetadataErr = nil, want the metadata failure")
+		}
+		if b.TranscriptErr != nil || b.TranscriptTimed == "" {
+			t.Errorf("transcript section disturbed: err=%v timed=%q", b.TranscriptErr, b.TranscriptTimed)
+		}
+		if b.Language != "vi" || !b.LanguageAutoDetected {
+			t.Errorf("language = %q auto=%v, want vi/true", b.Language, b.LanguageAutoDetected)
+		}
+	})
+
+	t.Run("explicit language: not auto-detected, lookup never called", func(t *testing.T) {
+		var lookups int32
+		withStubbedLookup(t, func(ctx context.Context, videoID string) (string, error) {
+			atomic.AddInt32(&lookups, 1)
+			return "ja", nil
+		})
+		withStubbedBrief(t, okMeta, okTranscript)
+		b := FetchVideoBrief(context.Background(), "vid", "vi")
+		if b.Language != "vi" || b.LanguageAutoDetected || atomic.LoadInt32(&lookups) != 0 {
+			t.Errorf("language=%q auto=%v lookups=%d, want vi/false/0", b.Language, b.LanguageAutoDetected, lookups)
+		}
+	})
 }

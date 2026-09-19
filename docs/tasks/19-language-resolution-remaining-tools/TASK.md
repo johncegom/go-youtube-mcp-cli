@@ -1,6 +1,6 @@
 # Task 19: Apply spoken-language resolution to the tools task 18 left out
 
-**Status:** in progress. Definition of Done + Test Plan approved by the
+**Status:** done (2026-09-20). Definition of Done + Test Plan approved by the
 human 2026-09-20, after an Advise call (logged in `docs/eagd-log.md`) and
 the human's review decisions (filename gets `_<lang>` for every save;
 playlist gets the minimum improvement only). Exists so the scope cut
@@ -67,7 +67,7 @@ mechanism differs; the reason is recorded per surface.
 
 ## Definition of Done
 
-- [ ] 19.1 `SaveTranscriptFile` path: an omitted `language` resolves via
+- [x] 19.1 `SaveTranscriptFile` path: an omitted `language` resolves via
   `ResolveLanguage` in the handlers and CLI `--save`; explicit `language` is
   untouched; the note (non-`en` only) appears in the MCP result and CLI
   `--save` output; the saved header has `**Language:** <code>` only when the
@@ -75,34 +75,34 @@ mechanism differs; the reason is recorded per surface.
   `<title>_<lang>[_timed].md` for every language including `en`; the `<lang>`
   component is sanitized to `[A-Za-z0-9_-]` — a test proves a language
   argument like `../../x` cannot produce a path outside `outputDir`.
-- [ ] 19.2 `FetchVideoBrief`: `ResolveLanguage` runs inside the transcript
+- [x] 19.2 `FetchVideoBrief`: `ResolveLanguage` runs inside the transcript
   goroutine; metadata/chapters remain concurrent; `VideoBrief.Language` set
   and a `Language:` line rendered only when not `en`; explicit `language`
   and resolution failure behave exactly as today; the per-section
   partial-failure contract is unchanged (`isError` iff the transcript
   section failed).
-- [ ] 19.3 `search_playlist`: no behavior change. Its `language` description
+- [x] 19.3 `search_playlist`: no behavior change. Its `language` description
   states that the default is `en` and is not auto-detected for playlists;
   a test (or the existing skip-line test extended) shows a per-video 429
   failure in the skipped list carries the language hint text.
-- [ ] 19.4 Unit tests for each path with the stubbed `lookupSpokenLanguage`
+- [x] 19.4 Unit tests for each path with the stubbed `lookupSpokenLanguage`
   seam (no network):
   omitted+non-en → resolved language used, note/`Language:` line present;
   omitted+`en` → none; explicit language → lookup never called; lookup
   error → `en`, no note; brief: metadata section unaffected when
   the transcript goroutine's resolve fails.
-- [ ] 19.5 `language` descriptions: `download_transcript*`, `get_video_brief`
+- [x] 19.5 `language` descriptions: `download_transcript*`, `get_video_brief`
   and CLI `--save` say the default is the video's spoken language (task 18's
   wording); `search_playlist` says it is `en` and not auto-detected. No
   description misstates its tool's actual default.
-- [ ] 19.6 Live smoke against `r8CppXSqVDU` (Vietnamese ASR only): the
+- [x] 19.6 Live smoke against `r8CppXSqVDU` (Vietnamese ASR only): the
   download tool saves `<title>_vi.md` (Vietnamese) with the `**Language:** vi`
   header, and the brief's transcript section succeeds with a `Language:` line.
   `BqRhBq-_kgE` (English) saves `<title>_en.md` with no `**Language:**` header
   line and behaves as before on the brief (no `Language:` line).
   `search_playlist` is unchanged (its skip line for a non-English video
   carries the language hint).
-- [ ] 19.7 `go build/vet/test ./...` + `gofmt -l` clean; DECISION-022's
+- [x] 19.7 `go build/vet/test ./...` + `gofmt -l` clean; DECISION-022's
   "inconsistency by design" consequence updated to say task 19 closed it (or
   names what remains); BUG-011's follow-up pointer updated; ledger + this
   file updated.
@@ -168,3 +168,61 @@ Logged so they are not lost; also indexed in `docs/LEDGER.md` "Backlog".
   lists a `<lang>-orig` native track; a resolver based on it would avoid our
   own `ytInitialPlayerRe` scan but costs a subprocess. Compare only if the
   page scan (~1 s) starts to matter.
+
+## Notes / deviations (2026-09-20)
+
+Implemented as approved, with these differences from the draft:
+
+- **Save path is one core function, not caller-side resolution.** The
+  Approach said the handlers and CLI would call `ResolveLanguage` first.
+  Grade flagged that the save wiring (resolve → save → note) had no unit
+  test because `SaveTranscriptFile` calls the network for metadata, so the
+  composition moved into `core.SaveTranscriptFileResolved` (resolve, save,
+  return the note), called by both the MCP download tools and CLI
+  `transcript --save`, with a `fetchMetadataForSave` seam. This also removed
+  the duplicated three lines at the two call sites. Tested end to end against
+  a temp directory with a seeded cache, stubbed lookup and stubbed metadata,
+  including a hostile `../../x` language staying inside `outputDir`.
+- **`FetchVideoBrief` gained two seams** (`fetchMetadataForBrief`,
+  `fetchTranscriptForBrief`) and a helper `fetchBriefTranscript` (resolve +
+  fetch, run inside the transcript goroutine). Its "sections fail
+  independently" contract, from task 17, had no direct test before; it now
+  does (failed resolve + failed transcript leaves metadata/chapters intact;
+  failed metadata leaves transcript and language intact; explicit language
+  never looks up). Race-clean.
+- **Brief line rule.** `Language:` is rendered only when the language was
+  auto-detected and is not `en` (`VideoBrief.LanguageAutoDetected`), so a
+  brief for an explicit `language` is exactly as before.
+- **`transcriptInput` removed.** Task 18 introduced it only because
+  `get_video_brief` kept the old `en` description; once the brief resolved
+  too, it was identical to `urlLangInput`, so all handlers use `urlLangInput`
+  again (`handlers_test.go` type names reverted accordingly).
+- **`search_playlist` is unchanged** by human decision (description only);
+  its skip line's language hint is pinned by
+  `TestSearchPlaylistEntries_RateLimitedSkipCarriesLanguageHint` (a
+  characterization test that passed on first run, since the hint already
+  existed from the BUG-011 fix).
+- **Filename rename is deliberate.** `title.md` becomes `title_en.md` for
+  existing English users (human decision). Nothing in the code or docs
+  referenced saved filenames.
+- **Live smoke** (after the final refactor, against real YouTube): MCP
+  `download_transcript` on `r8CppXSqVDU` saved `..._vi.md` with the
+  `**Language:** vi` header and returned the note; `BqRhBq-_kgE` saved
+  `..._en.md` with no language header; the brief showed
+  `Language: vi (auto-detected spoken language)` for the Vietnamese video
+  and no line for the English one; CLI `transcript --save` on
+  `r8CppXSqVDU` printed `language: vi (auto-detected spoken language)` on
+  stderr. Files created in `~/Downloads` by the CLI run were removed and the
+  directory listing verified identical to its pre-run snapshot.
+- **Grade history:** first pass 5 PASS / 1 FAIL (19.4: save path had no
+  integration test); after the fix, a targeted re-grade of 19.4 alone failed
+  on two brief clauses (omitted+`en` had no test; "metadata unaffected when
+  resolve fails" was only argued structurally); after the second fix a third
+  pass gave 19.4 PASS on every clause. Per the protocol only the failed item
+  was re-graded; the other items were graded on the pre-refactor code, so the
+  live smoke and full test suite were re-run after the refactor to cover
+  regressions. Only one of the four grader replies opened with the requested
+  `model:` line (`claude-haiku-4-5-20251001`).
+- **Follow-ups** are indexed in `docs/LEDGER.md` "Backlog" (playlist lazy
+  retry, translated-track-429 research, yt-dlp `-orig` resolver, naming the
+  language in the BUG-011 error, cheaper `captionTracks` extraction).

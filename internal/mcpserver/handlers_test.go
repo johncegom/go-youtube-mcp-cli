@@ -27,7 +27,7 @@ func outsideAllowedRoot() string {
 }
 
 func TestGetTranscriptHandler_InvalidURL(t *testing.T) {
-	res, _, err := getTranscriptHandler(context.Background(), nil, transcriptInput{URL: "not a url"})
+	res, _, err := getTranscriptHandler(context.Background(), nil, urlLangInput{URL: "not a url"})
 	if err != nil {
 		t.Fatalf("handler returned Go error: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestGetTranscriptHandler_InvalidURL(t *testing.T) {
 }
 
 func TestGetTranscriptTimedHandler_InvalidURL(t *testing.T) {
-	res, _, err := getTranscriptTimedHandler(context.Background(), nil, transcriptInput{URL: "not a url"})
+	res, _, err := getTranscriptTimedHandler(context.Background(), nil, urlLangInput{URL: "not a url"})
 	if err != nil {
 		t.Fatalf("handler returned Go error: %v", err)
 	}

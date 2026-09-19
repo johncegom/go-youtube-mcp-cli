@@ -33,10 +33,13 @@ func newTranscriptCommand() *cobra.Command {
 					return fatal("%s", err.Error())
 				}
 				stop := spinner("Saving transcript", quietFlag)
-				filePath, err := core.SaveTranscriptFile(cmd.Context(), videoID, language, dir, timestamps)
+				filePath, note, err := core.SaveTranscriptFileResolved(cmd.Context(), videoID, language, dir, timestamps)
 				stop()
 				if err != nil {
 					return fatal("%s", core.TranscriptErrorText(videoID, err))
+				}
+				if note != "" {
+					fmt.Fprintln(cmd.ErrOrStderr(), note)
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "Saved to: %s\n", filePath)
 				return nil
