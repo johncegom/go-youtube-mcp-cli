@@ -199,10 +199,11 @@ func filterSegmentsByRange(segments []transcriptSegment, startMs, endMs *float64
 //
 //	ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
 //
-// YouTube throttles auto-generated-caption downloads on a separate,
-// stricter quota than manual captions or general page/metadata scraping;
-// once exhausted it can stay exhausted for hours regardless of retries, so
-// the message deliberately does not suggest an immediate retry will help.
+// A 429 here has two known causes (see docs/BUGS.md BUG-011): requesting a
+// language other than the video's spoken one, which selects a
+// machine-translated track that YouTube rejects (reproduced directly with
+// yt-dlp), or a temporary throttle (BUG-009, unconfirmed). The message names
+// both rather than asserting either.
 func TranscriptErrorText(videoID string, err error) string {
 	switch classifyTranscriptError(err) {
 	case "timeout":
@@ -210,7 +211,7 @@ func TranscriptErrorText(videoID string, err error) string {
 	case "missing_captions":
 		return fmt.Sprintf("No transcript available for video %s. The video may not have captions.", videoID)
 	case "rate_limited":
-		return fmt.Sprintf("YouTube is throttling auto-caption downloads for this network right now (video %s). This isn't a transient blip — it can take hours to clear after heavy usage, and retrying immediately won't help. Wait before trying again, or use a different network.", videoID)
+		return fmt.Sprintf("YouTube rejected the caption download for video %s (HTTP 429). If the video isn't spoken in English, retry with the language option set to its spoken language (CLI: --language): the default \"en\" asks for a machine-translated track, which YouTube rejects. Otherwise this may be a temporary throttle; wait before retrying or use a different network.", videoID)
 	case "network":
 		return fmt.Sprintf("Network error while fetching transcript for video %s. Please check your internet connection.", videoID)
 	default:
