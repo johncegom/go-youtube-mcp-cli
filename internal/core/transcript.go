@@ -82,9 +82,30 @@ var vttEntityReplacer = strings.NewReplacer(
 	"&nbsp;", " ",
 )
 
+// cleanVttText strips cue tags, decodes the few entities YouTube emits and
+// collapses whitespace.
+func cleanVttText(s string) string {
+	s = vttTagRe.ReplaceAllString(s, "")
+	s = vttEntityReplacer.Replace(s)
+	s = whitespaceRe.ReplaceAllString(s, " ")
+	return strings.TrimSpace(s)
+}
+
+// parseVtt turns VTT content into segments. Auto-generated (ASR) captions are
+// "rolling" two-line cues (docs/BUGS.md BUG-010): every spoken line shows up
+// in a typing block (previous line as context + the new line), again in a
+// ~10 ms carry block, and again as the context line of the next typing
+// block. For those files (detectCaptionKind == CaptionAuto) only the last
+// non-empty line of each block is its cue text, and a block whose text
+// equals the previously kept segment's (the carry) is dropped, so each
+// spoken line appears once. Uploaded captions keep the original behavior: all
+// lines of a block joined, deduped on offset|text. A speaker line repeated
+// verbatim back to back in a rolling file collapses to one segment; that is
+// accepted (rare, and the repeat carries no new information).
 func parseVtt(content string) []transcriptSegment {
 	var segments []transcriptSegment
 	seen := map[string]struct{}{}
+	rolling := detectCaptionKind(content) == CaptionAuto
 
 	blocks := blankLineRe.Split(content, -1)
 	for _, block := range blocks {
@@ -108,20 +129,29 @@ func parseVtt(content string) []transcriptSegment {
 		offset := parseVttTime(m[1])
 		end := parseVttTime(m[2])
 
-		text := strings.Join(lines[timingIdx+1:], " ")
-		text = vttTagRe.ReplaceAllString(text, "")
-		text = vttEntityReplacer.Replace(text)
-		text = whitespaceRe.ReplaceAllString(text, " ")
-		text = strings.TrimSpace(text)
+		var text string
+		if rolling {
+			for i := len(lines) - 1; i > timingIdx && text == ""; i-- {
+				text = cleanVttText(lines[i])
+			}
+		} else {
+			text = cleanVttText(strings.Join(lines[timingIdx+1:], " "))
+		}
 
 		if text == "" {
 			continue
 		}
-		key := strconv.FormatFloat(offset, 'f', -1, 64) + "|" + text
-		if _, ok := seen[key]; ok {
-			continue
+		if rolling {
+			if n := len(segments); n > 0 && segments[n-1].Text == text {
+				continue
+			}
+		} else {
+			key := strconv.FormatFloat(offset, 'f', -1, 64) + "|" + text
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
 		}
-		seen[key] = struct{}{}
 
 		segments = append(segments, transcriptSegment{Text: text, Offset: offset, Duration: end - offset})
 	}
