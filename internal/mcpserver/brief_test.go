@@ -176,3 +176,25 @@ func TestGetVideoBriefHandler_InvalidURL(t *testing.T) {
 		t.Errorf("unexpected text: %s", contentText(t, res))
 	}
 }
+
+// task 19: an auto-detected non-en language is stated in the stats block; a
+// brief without it (explicit language, or en) renders exactly as before —
+// TestFormatVideoBrief_AllOK above is that unchanged-output check.
+func TestFormatVideoBrief_AutoDetectedLanguageLine(t *testing.T) {
+	b := okBrief()
+	b.Language, b.LanguageAutoDetected = "vi", true
+	text, isErr := formatVideoBrief("vid123", b)
+	if isErr {
+		t.Fatal("isError = true, want false")
+	}
+	const want = "Transcript stats:\nLanguage: vi (auto-detected spoken language)\nCaptions: likely auto-generated"
+	if !strings.Contains(text, want) {
+		t.Errorf("brief missing the language line before Captions:\n%s", text)
+	}
+
+	b.LanguageAutoDetected = false // e.g. an explicit language: no line
+	text, _ = formatVideoBrief("vid123", b)
+	if strings.Contains(text, "Language:") {
+		t.Errorf("brief has a Language line although it was not auto-detected:\n%s", text)
+	}
+}

@@ -6,6 +6,7 @@ package cli
 // visible in each newXCommand()), not a ported TS behavior.
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -52,14 +53,14 @@ func TestNewRootCommand_PersistentQuietFlag(t *testing.T) {
 
 func TestTranscriptCommand_FlagDefaults(t *testing.T) {
 	cmd := newTranscriptCommand()
-	checkFlagDefault(t, cmd, "language", "en")
+	checkFlagDefault(t, cmd, "language", "")
 	checkFlagDefault(t, cmd, "timestamps", "false")
 	checkFlagDefault(t, cmd, "save", "false")
 }
 
 func TestSearchCommand_FlagDefaults(t *testing.T) {
 	cmd := newSearchCommand()
-	checkFlagDefault(t, cmd, "language", "en")
+	checkFlagDefault(t, cmd, "language", "")
 }
 
 func TestMetadataCommand_FlagDefaults(t *testing.T) {
@@ -89,5 +90,20 @@ func TestFatal_CallsExitFuncWithStatus1(t *testing.T) {
 	}
 	if gotCode != 1 {
 		t.Errorf("exit code = %d, want 1", gotCode)
+	}
+}
+
+func TestPrintLanguageNote(t *testing.T) {
+	var buf bytes.Buffer
+	printLanguageNote(&buf, "", "vi")
+	if got, want := buf.String(), "language: vi (auto-detected spoken language)\n"; got != want {
+		t.Errorf("auto-detected vi: got %q, want %q", got, want)
+	}
+	for _, c := range []struct{ requested, resolved string }{{"", "en"}, {"vi", "vi"}, {"en", "en"}} {
+		buf.Reset()
+		printLanguageNote(&buf, c.requested, c.resolved)
+		if buf.Len() != 0 {
+			t.Errorf("printLanguageNote(%q, %q) wrote %q, want nothing", c.requested, c.resolved, buf.String())
+		}
 	}
 }

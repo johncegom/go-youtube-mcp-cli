@@ -41,18 +41,20 @@ func newSearchCommand() *cobra.Command {
 			query := args[1]
 
 			stop := spinner(fmt.Sprintf("Searching for %q", query), quietFlag)
-			result, err := core.SearchInTranscript(cmd.Context(), videoID, query, language, contextSecs)
+			lang := core.ResolveLanguage(cmd.Context(), videoID, language)
+			result, err := core.SearchInTranscript(cmd.Context(), videoID, query, lang, contextSecs)
 			stop()
 			if err != nil {
 				return fatal("%s", core.TranscriptErrorText(videoID, err))
 			}
+			printLanguageNote(cmd.ErrOrStderr(), language, lang)
 
 			printSearchResult(cmd.OutOrStdout(), os.Stderr, result)
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&language, "language", "l", "en", "language code")
+	cmd.Flags().StringVarP(&language, "language", "l", "", languageFlagUsage)
 	cmd.Flags().Float64Var(&contextSecs, "context", 15, "seconds of context around each match (0 = matched segments only)")
 
 	return cmd

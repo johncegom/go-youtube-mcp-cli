@@ -231,3 +231,19 @@ func FuzzExtractPlaylistID(f *testing.F) {
 		}
 	})
 }
+
+// Task 19 keeps search_playlist on the plain "en" default. A per-video 429
+// (a translated-track rejection for a non-English video) must therefore
+// arrive in the skipped list with the language hint from TranscriptErrorText
+// (BUG-011), since that hint is the user's only route to a fix there.
+func TestSearchPlaylistEntries_RateLimitedSkipCarriesLanguageHint(t *testing.T) {
+	const capturedYtDlp429Stderr = `ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests`
+	entries := []playlistEntry{{VideoID: "abc", Title: "Video One"}}
+	fetch := func(ctx context.Context, videoID, language string) ([]transcriptSegment, bool, error) {
+		return nil, true, errors.New(capturedYtDlp429Stderr)
+	}
+	_, skipped := searchPlaylistEntries(context.Background(), entries, "hello", "en", fetch, func(time.Duration) {})
+	if len(skipped) != 1 || !strings.Contains(skipped[0], "language option") {
+		t.Errorf("skipped = %+v, want one entry carrying the language hint", skipped)
+	}
+}

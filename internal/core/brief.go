@@ -72,21 +72,34 @@ type VideoBrief struct {
 	CaptionKind     CaptionKind
 	Stats           TranscriptStats
 	TranscriptErr   error
+
+	// Language is the transcript language actually fetched. LanguageAutoDetected
+	// is true only when the caller omitted the language and it resolved to
+	// something other than "en" (task 19); the MCP output states the language
+	// only then.
+	Language             string
+	LanguageAutoDetected bool
 }
+
+// The two network legs of FetchVideoBrief, as variables so tests can check its
+// sections fail independently without the network.
+var (
+	fetchMetadataForBrief   = fetchVideoMetadataAndChapters
+	fetchTranscriptForBrief = fetchTranscript
+)
 
 // FetchVideoBrief fetches metadata+chapters (one watch-page fetch) and the
 // transcript (yt-dlp, cache-backed) concurrently — the same shape as
 // SaveTranscriptFile — and never returns a Go error: each section's error
 // lands in the corresponding VideoBrief field.
 func FetchVideoBrief(ctx context.Context, videoID, language string) VideoBrief {
-	language = normalizeLanguage(language)
 	var b VideoBrief
 
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		meta, prChapters, err := fetchVideoMetadataAndChapters(ctx, videoID)
+		meta, prChapters, err := fetchMetadataForBrief(ctx, videoID)
 		if err != nil {
 			b.MetadataErr = err
 			return
@@ -96,15 +109,29 @@ func FetchVideoBrief(ctx context.Context, videoID, language string) VideoBrief {
 	}()
 	go func() {
 		defer wg.Done()
-		tr, err := fetchTranscript(ctx, videoID, language)
+		tr, lang, auto, err := fetchBriefTranscript(ctx, videoID, language)
 		if err != nil {
 			b.TranscriptErr = err
 			return
 		}
+		b.Language, b.LanguageAutoDetected = lang, auto
 		b.TranscriptTimed = transcriptTimed(tr.Segments)
 		b.CaptionKind = tr.CaptionKind
 		b.Stats = computeTranscriptStats(tr.Segments)
 	}()
 	wg.Wait()
 	return b
+}
+
+// fetchBriefTranscript resolves the transcript language and fetches the
+// transcript. The resolution (a memoized watch-page lookup when language is
+// omitted) deliberately runs here, inside the brief's transcript goroutine,
+// not before it: the metadata/chapters goroutine stays fully concurrent, so
+// the ~1 s lookup usually hides behind the yt-dlp fetch (task 19). An explicit
+// language skips the lookup; a failed lookup keeps "en", i.e. today's behavior.
+func fetchBriefTranscript(ctx context.Context, videoID, requested string) (tr parsedTranscript, language string, autoDetected bool, err error) {
+	language = ResolveLanguage(ctx, videoID, requested)
+	autoDetected = requested == "" && language != "en"
+	tr, err = fetchTranscriptForBrief(ctx, videoID, language)
+	return tr, language, autoDetected, err
 }

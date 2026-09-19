@@ -329,3 +329,18 @@ func TestNewServer_AliasesMatchCanonical(t *testing.T) {
 		})
 	}
 }
+
+// withLanguageNote puts the auto-detected-language note in a header ahead of
+// the transcript, separated by a blank line, and leaves the transcript text
+// itself untouched (task 18, 18.5). Pure composition, so no network.
+func TestWithLanguageNote(t *testing.T) {
+	const text = "[00:01] hello\n[00:02] world"
+	if got := withLanguageNote("", text); got != text {
+		t.Errorf("empty note changed the text: %q", got)
+	}
+	const note = "language: vi (auto-detected spoken language)"
+	want := note + "\n\n" + text
+	if got := withLanguageNote(note, text); got != want {
+		t.Errorf("withLanguageNote() = %q, want %q", got, want)
+	}
+}

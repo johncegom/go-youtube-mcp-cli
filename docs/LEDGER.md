@@ -49,6 +49,8 @@ this index) before pausing.
 | — | Out-of-band: `Taskfile.yml` dev-tooling wrapper | [x] done | [docs/tasks/taskfile/TASK.md](tasks/taskfile/TASK.md) |
 | 16 | Transcript-fetch observability logging | [x] done | [docs/tasks/16-transcript-observability/TASK.md](tasks/16-transcript-observability/TASK.md) |
 | 17 | Composite `get_video_brief` tool (metadata + chapters + timed transcript + stats, per-section failure) | [x] done | [docs/tasks/17-video-brief/TASK.md](tasks/17-video-brief/TASK.md) |
+| 18 | Resolve the default transcript language from the video's `captionTracks` (fixes the BUG-011 default-`en` trigger for `get_transcript*`/`search_transcript`/CLI) | [x] done | [docs/tasks/18-native-language-fallback/TASK.md](tasks/18-native-language-fallback/TASK.md) |
+| 19 | Apply spoken-language resolution to `download_transcript*` and `get_video_brief` (`search_playlist` intentionally left on `en`; closes most of DECISION-022's scope cut) | [x] done | [docs/tasks/19-language-resolution-remaining-tools/TASK.md](tasks/19-language-resolution-remaining-tools/TASK.md) |
 
 ## Current status
 
@@ -179,6 +181,10 @@ intermittent timeout BUG-007 took a live investigation to root-cause. No new
 logging framework — reused the existing plain-text `errors.log`. See
 `docs/DECISIONS.md` DECISION-020.
 
+**Task 18 (2026-09-20)** — see `docs/tasks/18-native-language-fallback/TASK.md`: an omitted `language` is now resolved from the watch page's `captionTracks` (any `en*` track → `en`, else the ASR track's language, else `en`) by `core.ResolveLanguage`, called by the MCP `get_transcript`/`get_transcript_timed`/`get_transcript_range`/`search_transcript` handlers and the CLI `transcript`/`search`; an explicit `language` is always honored. A `language: <code> (auto-detected spoken language)` note is shown outside the transcript body only when the result isn't `en`. `download_transcript*`, `get_video_brief` and `search_playlist` keep the plain `en` default (DECISION-022). Follow-up to BUG-011; approach chosen after an Advise call (`docs/eagd-log.md`).
+
+**Task 19 (2026-09-20)** — see `docs/tasks/19-language-resolution-remaining-tools/TASK.md`: applies task 18's spoken-language resolution to `download_transcript*`/CLI `transcript --save` (via `core.SaveTranscriptFileResolved`) and `get_video_brief` (resolved inside its transcript goroutine; `Language:` line only when auto-detected and not `en`). Saved transcripts are now named `<title>_<lang>[_timed].md` for every language including `en` (human decision; language component sanitized), with a `**Language:**` header line only for non-`en`. `search_playlist` deliberately stays on the plain `en` default (human decision, minimum improvement: description only); the lazy-retry design is parked in the Backlog below. DECISION-022 updated. Grade needed two targeted fixes before 19.4 passed (save-path and brief-independence tests).
+
 **Task 17 (`get_video_brief`, 2026-09-15)** — see
 `docs/tasks/17-video-brief/TASK.md` for full detail. Scoped from a
 brainstorm of "use-case-shaped" composite tools (one call for a whole
@@ -198,13 +204,30 @@ brief's word stats until fixed. BUG-008's pending diagnostic work was
 committed first on its own branch (PR #29) so both changes to
 `fetchSegmentsFromYtDlp` stack cleanly.
 
+## Backlog (not scheduled)
+
+Ideas and research items that were deliberately parked, so a fresh session can
+find them without re-deriving them. Nothing here is approved work; anything
+promoted to a task gets a row in the table above and a `TASK.md`.
+
+| Item | Kind | Detail |
+|------|------|--------|
+| Playlist search: lazy retry-on-failure language resolution (Advise-recommended full fix for `search_playlist`) | improvement | [task 19, "Future improvements"](tasks/19-language-resolution-remaining-tools/TASK.md) |
+| Re-check whether translated-caption 429s are permanent or vary by network/time (n=4 on one network, one day) | research | [task 19, "Future improvements"](tasks/19-language-resolution-remaining-tools/TASK.md) |
+| Resolve the spoken language via yt-dlp's `<lang>-orig` track instead of the page scan | research | [task 19, "Future improvements"](tasks/19-language-resolution-remaining-tools/TASK.md) |
+| Name the spoken language inside the BUG-011 error for an explicit `en` on a non-English video | improvement | [task 19, "Out of scope"](tasks/19-language-resolution-remaining-tools/TASK.md) |
+| Cheaper `captionTracks` extraction than the `ytInitialPlayerRe` scan (~1 s on a real page) | improvement | [task 18 notes](tasks/18-native-language-fallback/TASK.md) |
+
 ## Resume checklist for next session
 
 1. Read this index first (not the individual task files, unless you need one).
 2. Run `go build ./... && go vet ./... && go test ./...` to confirm the current state still holds.
 3. Skim `docs/RETRO.md` for any still-relevant advice before starting new work.
-4. **Phase 2 (tasks 11-15), task 16 (observability logging) and task 17
-   (`get_video_brief`) are done.** No task is currently approved to start
+4. **Phase 2 (tasks 11-15), task 16 (observability logging), task 17
+   (`get_video_brief`) and task 18 (default language resolved from
+   `captionTracks`, DECISION-022) and task 19 (same resolution for the
+   download tools and `get_video_brief`; `search_playlist` intentionally left
+   on `en`) are done.** No task is currently approved to start
    next — the next step is a new scoping pass with the human. Two open
    decisions are waiting on the human: **BUG-010** (auto-caption
    rolling-cue duplication in `parseVtt`, recommended fix option 1 in
