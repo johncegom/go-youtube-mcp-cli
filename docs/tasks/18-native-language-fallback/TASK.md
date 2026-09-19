@@ -197,6 +197,7 @@ placement (behavior is what the Definition of Done specifies):
   input = diff + command output only: 10 PASS / 0 FAIL. Its reply did not
   open with the requested `model:` line, so the model identity is not
   confirmed from the reply itself.
-- **Follow-ups (not scheduled):** apply the same resolution to
-  `SaveTranscriptFile`, `get_video_brief` and `search_playlist` (DECISION-022);
-  name the spoken language in the BUG-011 message for an explicit `en`.
+- **Follow-ups:** applying the same resolution to `SaveTranscriptFile`,
+  `get_video_brief` and `search_playlist` is tracked as task 19
+  (`docs/tasks/19-language-resolution-remaining-tools/TASK.md`, DECISION-022);
+  not scheduled: naming the spoken language in the BUG-011 message for an explicit `en`.

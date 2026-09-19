@@ -50,6 +50,7 @@ this index) before pausing.
 | 16 | Transcript-fetch observability logging | [x] done | [docs/tasks/16-transcript-observability/TASK.md](tasks/16-transcript-observability/TASK.md) |
 | 17 | Composite `get_video_brief` tool (metadata + chapters + timed transcript + stats, per-section failure) | [x] done | [docs/tasks/17-video-brief/TASK.md](tasks/17-video-brief/TASK.md) |
 | 18 | Resolve the default transcript language from the video's `captionTracks` (fixes the BUG-011 default-`en` trigger for `get_transcript*`/`search_transcript`/CLI) | [x] done | [docs/tasks/18-native-language-fallback/TASK.md](tasks/18-native-language-fallback/TASK.md) |
+| 19 | Apply spoken-language resolution to `download_transcript*`, `get_video_brief` and `search_playlist` (closes DECISION-022's deliberate scope cut) | [ ] not started — draft, DoD awaiting review | [docs/tasks/19-language-resolution-remaining-tools/TASK.md](tasks/19-language-resolution-remaining-tools/TASK.md) |
 
 ## Current status
 
@@ -208,7 +209,10 @@ committed first on its own branch (PR #29) so both changes to
 3. Skim `docs/RETRO.md` for any still-relevant advice before starting new work.
 4. **Phase 2 (tasks 11-15), task 16 (observability logging), task 17
    (`get_video_brief`) and task 18 (default language resolved from
-   `captionTracks`, DECISION-022) are done.** No task is currently approved to start
+   `captionTracks`, DECISION-022) are done.** **Task 19 (draft) is the tracked follow-up**
+   for the three surfaces task 18 deliberately left on the plain `en` default;
+   until it lands, the same non-English video works in `get_transcript` but
+   fails in `download_transcript`/`get_video_brief`/`search_playlist`. No task is currently approved to start
    next — the next step is a new scoping pass with the human. Two open
    decisions are waiting on the human: **BUG-010** (auto-caption
    rolling-cue duplication in `parseVtt`, recommended fix option 1 in
