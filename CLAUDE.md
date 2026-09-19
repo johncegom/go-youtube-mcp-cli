@@ -10,6 +10,85 @@ It started as a faithful Go port of [`umbertotancorre/youtube-mcp-cli`](https://
 
 **Before doing any work here, read `docs/PLAN.md` (the full design/porting plan), `docs/LEDGER.md` (a lightweight index — current status + a table linking to each task's full detail under `docs/tasks/<slug>/TASK.md`), `docs/BUGS.md` (tracked bugs — including inherited-from-upstream ones — pending a decision), `docs/DECISIONS.md` (deliberate design/scope tradeoffs made along the way), and `docs/RETRO.md` (continuous-improvement retrospectives — process/product-quality lessons, not bugs or decisions) — the ledger index is the source of truth for progress, not this file. Read `docs/LEDGER.md` first, then open only the specific `docs/tasks/*/TASK.md` file(s) you actually need — this split exists specifically to avoid loading every finished task's history into context.**
 
+### Way of working: tier and re-calibration
+
+Calibrated as **Tier 3 (standard + ground truth)** via `/bootstrap-way-of-working`,
+re-checked 2026-09-19. Reasoning: one human author, but many independent AI
+sessions that each start with no memory, so the approval gate and ledger earn
+their cost. The project is long-lived and public. Phase 1 had a real oracle
+(the upstream TS project), so ground-truth TDD applies to *ported* functions
+only. Phase 2 features have no oracle and use ordinary test-first development.
+Blast radius is moderate: the tools shell out to `yt-dlp` and write files
+under allowlisted directories.
+
+Re-run the calibration when any of these happens:
+
+- A second human contributor joins, or several AI sessions start working in parallel.
+- The project starts handling credentials, user accounts, or anything beyond public YouTube data.
+- Ground-truth TDD no longer matches the work, for example once no ported function is left to touch.
+- A log (`docs/BUGS.md`, `docs/DECISIONS.md`, `docs/RETRO.md`) goes untouched across several tasks that should have fed it, or a task's Definition of Done is being written after the fact. Treat that as a signal to retire or tighten the artifact, not to ignore it.
+- The installed process visibly mismatches reality, in either direction.
+
+### Execute / Advise / Grade: spawned second-opinion and fresh-eyes checks
+
+You are **Execute**. Two roles run as separate sub-agent calls on a bound
+model. Rationale: `docs/execute-advise-grade-dream.md`. Every event is logged
+in `docs/eagd-log.md`. Dream is deliberately not installed: `docs/RETRO.md`,
+`docs/DECISIONS.md` and `docs/LEDGER.md` already persist learnings, and a
+second writer to them would blur their triggers.
+
+Model bindings. Use the row whose `tool` is the sub-agent tool you actually
+hold (check your tool list, do not guess) and whose `status=ok`:
+
+<!-- eagd-bindings:start -->
+eagd-binding: role=advise tool=Agent model=opus status=ok probed=2026-09-19 reported=claude-opus-5
+eagd-binding: role=grade tool=Agent model=haiku status=ok probed=2026-09-19 reported=claude-haiku-4-5-20251001
+<!-- eagd-bindings:end -->
+
+**Advise.** Fires on one observable condition, never on felt doubt: once
+per new task, after you have drafted its `TASK.md` Definition of Done, Test
+Plan and (when required) Program design, and before you ask the human to
+review it or start coding. That call is about the approach, so this is the
+moment to spend it. Only judgment calls go to Advise. Anything answerable by
+reading the repo, read. A preference only the human can settle goes to the
+human, and the pause-and-ask rules for tasks and `docs/BUGS.md` decisions are
+unchanged: Advise never stands in for them. Write your leaning and why in one
+or two lines first. Then call the sub-agent tool with the `role=advise`
+row's `model`, giving it the question, your leaning with the case for and
+against, and the artifacts the decision turns on verbatim (the draft
+`TASK.md`, the relevant source files, error output), not your summary and
+not the transcript. Ask it to name any context it lacked and to begin its
+reply with `model: <its id>`. Wait for the reply before continuing. If the
+reported model does not match the row, set that row to `status=stale`, add a
+Binding-changes row to the log, and skip Advise until it is fixed. No usable
+row, or the spawn errors: do not run Advise on your own model. Proceed on
+your leaning, log the call with Status `SKIPPED reason=no-verified-model-binding`,
+and say in the PR body or final report that Advise did not run. After every
+call add one row to the log's "Advise calls" table: date, branch, question,
+prior leaning, answer, which was taken, tool, requested model, reported
+model, status.
+
+**Grade.** Fires after you finish a task's implementation and before you
+update its `TASK.md` checkboxes and `docs/LEDGER.md`. Spawn a fresh call with
+the `role=grade` row's `model`, giving it only the rubric (the task's
+Definition of Done items, verbatim) and the finished output (the diff and the
+command output for the Test Plan). Withhold your reasoning, working notes and
+any Advise exchange. Ask for pass or fail per item, quoting the evidence.
+Default fail mode is a targeted fix: each Definition of Done item maps to an
+identifiable span, so patch only the failing item and re-check only failed
+items. Use a full rerun only when the failure is about the approach as a
+whole. No usable row or the spawn errors: fall back to a fresh, context-free
+call on your own model and add a row to the log's "Grade fallbacks" table.
+
+**Re-calibration.** Re-run `/bootstrap-eagd-pattern` when any of these shows
+up in `docs/eagd-log.md`. Count `SKIPPED` rows per Tool first: many skips mean
+a missing binding, so re-run from that harness before touching a trigger.
+
+- Advise fires on nearly every task, or never after a long stretch.
+- Advise's decision-change rate (answer differed from the prior leaning) sits near zero, read per Tool. That means the calls are ceremony.
+- Grade never fails, or its failures are never real.
+- A harness other than `Agent` starts working in this repo and has no binding row.
+
 ### Task approval: Definition of Done + Test Plan (anti-drift control)
 
 Before starting implementation on any task, its `docs/tasks/<slug>/TASK.md`
@@ -29,6 +108,15 @@ content "while you're in there" — even when the fix is correct. If you
 notice something out of scope while working, either ask first or log it
 separately (as its own decision/task), rather than folding it into the
 current task's diff unannounced.
+
+**Program design (only when it applies).** If a task touches several
+files or functions whose interaction isn't obvious, or an agent will write a
+substantial chunk of new code in one pass, add a short "Program design"
+section to its `TASK.md` before implementation: types to add or change, key
+signatures, and the call graph (or event flow for async code). Add package
+and file layout when the task spans more than one package. Skip it for small
+or mechanical edits. See `docs/tasks/07-mcpserver/TASK.md` for the
+Definition of Done + Test Plan pattern this extends.
 
 ### Long-running tasks: track progress as sub-tasks in TASK.md
 
