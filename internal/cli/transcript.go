@@ -43,23 +43,25 @@ func newTranscriptCommand() *cobra.Command {
 			}
 
 			stop := spinner("Fetching transcript", quietFlag)
+			lang := core.ResolveLanguage(cmd.Context(), videoID, language)
 			var text string
 			var err error
 			if timestamps {
-				text, err = core.GetTranscriptTimed(cmd.Context(), videoID, language)
+				text, err = core.GetTranscriptTimed(cmd.Context(), videoID, lang)
 			} else {
-				text, err = core.GetTranscriptText(cmd.Context(), videoID, language)
+				text, err = core.GetTranscriptText(cmd.Context(), videoID, lang)
 			}
 			stop()
 			if err != nil {
 				return fatal("%s", core.TranscriptErrorText(videoID, err))
 			}
+			printLanguageNote(cmd.ErrOrStderr(), language, lang)
 			fmt.Fprintln(cmd.OutOrStdout(), text)
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&language, "language", "l", "en", "language code")
+	cmd.Flags().StringVarP(&language, "language", "l", "", languageFlagUsage)
 	cmd.Flags().BoolVarP(&timestamps, "timestamps", "t", false, "include [MM:SS] timestamps")
 	cmd.Flags().BoolVarP(&save, "save", "s", false, "save as .md file to Downloads instead of printing")
 

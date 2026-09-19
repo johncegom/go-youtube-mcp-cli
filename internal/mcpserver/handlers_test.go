@@ -27,7 +27,7 @@ func outsideAllowedRoot() string {
 }
 
 func TestGetTranscriptHandler_InvalidURL(t *testing.T) {
-	res, _, err := getTranscriptHandler(context.Background(), nil, urlLangInput{URL: "not a url"})
+	res, _, err := getTranscriptHandler(context.Background(), nil, transcriptInput{URL: "not a url"})
 	if err != nil {
 		t.Fatalf("handler returned Go error: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestGetTranscriptHandler_InvalidURL(t *testing.T) {
 }
 
 func TestGetTranscriptTimedHandler_InvalidURL(t *testing.T) {
-	res, _, err := getTranscriptTimedHandler(context.Background(), nil, urlLangInput{URL: "not a url"})
+	res, _, err := getTranscriptTimedHandler(context.Background(), nil, transcriptInput{URL: "not a url"})
 	if err != nil {
 		t.Fatalf("handler returned Go error: %v", err)
 	}
@@ -327,5 +327,20 @@ func TestNewServer_AliasesMatchCanonical(t *testing.T) {
 				t.Errorf("output differs:\ncanonical (%s) = %q\nalias (%s)     = %q", p.canonical, canonText, p.alias, aliasText)
 			}
 		})
+	}
+}
+
+// withLanguageNote puts the auto-detected-language note in a header ahead of
+// the transcript, separated by a blank line, and leaves the transcript text
+// itself untouched (task 18, 18.5). Pure composition, so no network.
+func TestWithLanguageNote(t *testing.T) {
+	const text = "[00:01] hello\n[00:02] world"
+	if got := withLanguageNote("", text); got != text {
+		t.Errorf("empty note changed the text: %q", got)
+	}
+	const note = "language: vi (auto-detected spoken language)"
+	want := note + "\n\n" + text
+	if got := withLanguageNote(note, text); got != want {
+		t.Errorf("withLanguageNote() = %q, want %q", got, want)
 	}
 }

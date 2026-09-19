@@ -77,10 +77,10 @@ func FetchVideoMetadata(ctx context.Context, videoID string) (map[string]string,
 	return meta, err
 }
 
-// fetchVideoMetadataAndChapters does the actual watch-page fetch, shared by
-// FetchVideoMetadata and FetchChapters so a get_chapters call only needs one
-// HTTP request, not two.
-func fetchVideoMetadataAndChapters(ctx context.Context, videoID string) (map[string]string, []Chapter, error) {
+// fetchWatchPageHTML downloads the video's watch page. It is the one HTTP
+// path to that page, shared by the metadata/chapters scrape and the spoken-
+// language lookup (language.go).
+func fetchWatchPageHTML(ctx context.Context, videoID string) (string, error) {
 	pageURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
 
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -88,23 +88,33 @@ func fetchVideoMetadataAndChapters(ctx context.Context, videoID string) (map[str
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
-		return nil, nil, err
+		return "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; YoutubeMCP/1.0)")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, nil, err
+		return "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, nil, fmt.Errorf("YouTube responded with %d %s", resp.StatusCode, resp.Status)
+		return "", fmt.Errorf("YouTube responded with %d %s", resp.StatusCode, resp.Status)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+// fetchVideoMetadataAndChapters does the actual watch-page fetch, shared by
+// FetchVideoMetadata and FetchChapters so a get_chapters call only needs one
+// HTTP request, not two.
+func fetchVideoMetadataAndChapters(ctx context.Context, videoID string) (map[string]string, []Chapter, error) {
+	html, err := fetchWatchPageHTML(ctx, videoID)
+	if err != nil {
 		return nil, nil, err
 	}
-	html := string(body)
 
 	meta := map[string]string{}
 	var prChapters []Chapter

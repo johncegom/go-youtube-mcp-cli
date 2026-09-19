@@ -5,8 +5,10 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 
+	"github.com/johncegom/go-youtube-mcp-cli/internal/core"
 	"github.com/spf13/cobra"
 )
 
@@ -50,4 +52,17 @@ func NewRootCommand(version string) *cobra.Command {
 	root.AddCommand(newDownloadCommand())
 
 	return root
+}
+
+// languageFlagUsage is the --language help text for the commands whose
+// omitted language is resolved from the video (task 18).
+const languageFlagUsage = "language code (default: the video's spoken language, else en)"
+
+// printLanguageNote tells the user, on stderr and outside the transcript on
+// stdout, which language was auto-detected for them. It prints nothing when
+// the caller passed --language or the detected language is "en".
+func printLanguageNote(w io.Writer, requested, resolved string) {
+	if note := core.LanguageNote(requested, resolved); note != "" {
+		fmt.Fprintln(w, note)
+	}
 }

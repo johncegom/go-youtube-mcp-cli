@@ -23,6 +23,14 @@ type urlLangInput struct {
 	Language string `json:"language,omitempty" jsonschema:"Optional. Language code for the transcript (e.g. 'en', 'it'). Defaults to 'en'."`
 }
 
+// transcriptInput is urlLangInput for the tools whose omitted `language` is
+// resolved from the video (task 18); get_video_brief keeps urlLangInput and
+// its plain "en" default.
+type transcriptInput struct {
+	URL      string `json:"url" jsonschema:"The full YouTube URL or video ID (e.g. https://youtube.com/watch?v=abc123 or just abc123)"`
+	Language string `json:"language,omitempty" jsonschema:"Optional. Language code for the transcript (e.g. 'en', 'it'). Defaults to the video's spoken language when its captions identify one, otherwise 'en'."`
+}
+
 type metadataInput struct {
 	URL string `json:"url" jsonschema:"The full YouTube URL or video ID"`
 }
@@ -30,7 +38,7 @@ type metadataInput struct {
 type searchInput struct {
 	URL      string   `json:"url" jsonschema:"The full YouTube URL or video ID"`
 	Query    string   `json:"query" jsonschema:"The keyword or phrase to search for"`
-	Language string   `json:"language,omitempty" jsonschema:"Optional. Language code. Defaults to 'en'."`
+	Language string   `json:"language,omitempty" jsonschema:"Optional. Language code. Defaults to the video's spoken language when its captions identify one, otherwise 'en'."`
 	Context  *float64 `json:"context,omitempty" jsonschema:"Optional. Seconds of context to include around each match, default 15. Pass 0 to return only the matched segment(s), no surrounding context."`
 }
 
@@ -38,7 +46,7 @@ type rangeInput struct {
 	URL      string `json:"url" jsonschema:"The full YouTube URL or video ID"`
 	Start    string `json:"start,omitempty" jsonschema:"Optional start timestamp (e.g. '1:30' or '1:02:03'). Omit for the beginning of the video."`
 	End      string `json:"end,omitempty" jsonschema:"Optional end timestamp (e.g. '3:45' or '1:05:00'). Omit for the end of the video."`
-	Language string `json:"language,omitempty" jsonschema:"Optional. Language code for the transcript (e.g. 'en', 'it'). Defaults to 'en'."`
+	Language string `json:"language,omitempty" jsonschema:"Optional. Language code for the transcript (e.g. 'en', 'it'). Defaults to the video's spoken language when its captions identify one, otherwise 'en'."`
 }
 
 type downloadVideoInput struct {
@@ -84,6 +92,17 @@ func textResult(text string, isError bool) *mcp.CallToolResult {
 	}
 }
 
+// withLanguageNote puts note in a header ahead of text, separated by a blank
+// line, so the auto-detected-language notice stays outside the transcript
+// body (offsets, quoting and parsing of the body are unaffected). An empty
+// note returns text unchanged.
+func withLanguageNote(note, text string) string {
+	if note == "" {
+		return text
+	}
+	return note + "\n\n" + text
+}
+
 func invalidURLResult(url string) *mcp.CallToolResult {
 	return textResult(fmt.Sprintf(
 		"Invalid YouTube URL or video ID: %q. Please provide a valid YouTube URL (e.g. https://youtube.com/watch?v=abc123) or a bare video ID.",
@@ -103,28 +122,30 @@ func invalidPlaylistURLResult(url string) *mcp.CallToolResult {
 // exactly, not the SDK's structured-output auto-marshaling (which would
 // kick in for any concrete Out type).
 
-func getTranscriptHandler(ctx context.Context, _ *mcp.CallToolRequest, in urlLangInput) (*mcp.CallToolResult, any, error) {
+func getTranscriptHandler(ctx context.Context, _ *mcp.CallToolRequest, in transcriptInput) (*mcp.CallToolResult, any, error) {
 	videoID := core.ExtractVideoID(in.URL)
 	if videoID == "" {
 		return invalidURLResult(in.URL), nil, nil
 	}
-	text, err := core.GetTranscriptText(ctx, videoID, in.Language)
+	lang := core.ResolveLanguage(ctx, videoID, in.Language)
+	text, err := core.GetTranscriptText(ctx, videoID, lang)
 	if err != nil {
 		return textResult(core.TranscriptErrorText(videoID, err), true), nil, nil
 	}
-	return textResult(text, false), nil, nil
+	return textResult(withLanguageNote(core.LanguageNote(in.Language, lang), text), false), nil, nil
 }
 
-func getTranscriptTimedHandler(ctx context.Context, _ *mcp.CallToolRequest, in urlLangInput) (*mcp.CallToolResult, any, error) {
+func getTranscriptTimedHandler(ctx context.Context, _ *mcp.CallToolRequest, in transcriptInput) (*mcp.CallToolResult, any, error) {
 	videoID := core.ExtractVideoID(in.URL)
 	if videoID == "" {
 		return invalidURLResult(in.URL), nil, nil
 	}
-	text, err := core.GetTranscriptTimed(ctx, videoID, in.Language)
+	lang := core.ResolveLanguage(ctx, videoID, in.Language)
+	text, err := core.GetTranscriptTimed(ctx, videoID, lang)
 	if err != nil {
 		return textResult(core.TranscriptErrorText(videoID, err), true), nil, nil
 	}
-	return textResult(text, false), nil, nil
+	return textResult(withLanguageNote(core.LanguageNote(in.Language, lang), text), false), nil, nil
 }
 
 // getTranscriptRangeHandler returns only the transcript segments within
@@ -155,11 +176,12 @@ func getTranscriptRangeHandler(ctx context.Context, _ *mcp.CallToolRequest, in r
 		return textResult("Invalid range: start must not be after end.", true), nil, nil
 	}
 
-	text, err := core.GetTranscriptRange(ctx, videoID, in.Language, startSec, endSec)
+	lang := core.ResolveLanguage(ctx, videoID, in.Language)
+	text, err := core.GetTranscriptRange(ctx, videoID, lang, startSec, endSec)
 	if err != nil {
 		return textResult(core.TranscriptErrorText(videoID, err), true), nil, nil
 	}
-	return textResult(text, false), nil, nil
+	return textResult(withLanguageNote(core.LanguageNote(in.Language, lang), text), false), nil, nil
 }
 
 func getMetadataHandler(ctx context.Context, _ *mcp.CallToolRequest, in metadataInput) (*mcp.CallToolResult, any, error) {
@@ -326,11 +348,12 @@ func searchTranscriptHandler(ctx context.Context, _ *mcp.CallToolRequest, in sea
 	if in.Context != nil {
 		contextSecs = *in.Context
 	}
-	text, err := core.SearchInTranscript(ctx, videoID, in.Query, in.Language, contextSecs)
+	lang := core.ResolveLanguage(ctx, videoID, in.Language)
+	text, err := core.SearchInTranscript(ctx, videoID, in.Query, lang, contextSecs)
 	if err != nil {
 		return textResult(core.TranscriptErrorText(videoID, err), true), nil, nil
 	}
-	return textResult(text, false), nil, nil
+	return textResult(withLanguageNote(core.LanguageNote(in.Language, lang), text), false), nil, nil
 }
 
 func downloadVideoHandler(ctx context.Context, _ *mcp.CallToolRequest, in downloadVideoInput) (*mcp.CallToolResult, any, error) {

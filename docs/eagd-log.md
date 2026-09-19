@@ -6,6 +6,7 @@ Append-only. One row per event, one line per row, no line breaks inside a cell, 
 
 | Date | Branch | Question | Prior leaning | Answer | Taken | Tool | Requested | Reported | Status |
 |------|--------|----------|---------------|--------|-------|------|-----------|----------|--------|
+| 2026-09-20 | feat/task-18-native-language-fallback | Fall back to the native caption track after an en 429, or resolve the default language from captionTracks before fetching? | Fallback on 429 (smallest diff, no change on working paths) | Resolve first + per-video memo: the 429 category cannot tell a translated-track rejection from a real throttle, so a fallback could silently serve the wrong language; also drop parsedTranscript.Language, keep the language note out of the transcript body, add a DECISIONS entry for the Save/brief scope cut | Answer taken, except naming the spoken language in the BUG-011 message (deferred as a follow-up) | Agent | opus | claude-opus-5 | ok |
 
 ## Binding changes
 
