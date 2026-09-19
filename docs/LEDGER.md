@@ -50,7 +50,7 @@ this index) before pausing.
 | 16 | Transcript-fetch observability logging | [x] done | [docs/tasks/16-transcript-observability/TASK.md](tasks/16-transcript-observability/TASK.md) |
 | 17 | Composite `get_video_brief` tool (metadata + chapters + timed transcript + stats, per-section failure) | [x] done | [docs/tasks/17-video-brief/TASK.md](tasks/17-video-brief/TASK.md) |
 | 18 | Resolve the default transcript language from the video's `captionTracks` (fixes the BUG-011 default-`en` trigger for `get_transcript*`/`search_transcript`/CLI) | [x] done | [docs/tasks/18-native-language-fallback/TASK.md](tasks/18-native-language-fallback/TASK.md) |
-| 19 | Apply spoken-language resolution to `download_transcript*`, `get_video_brief` and `search_playlist` (closes DECISION-022's deliberate scope cut) | [ ] not started — draft, DoD awaiting review | [docs/tasks/19-language-resolution-remaining-tools/TASK.md](tasks/19-language-resolution-remaining-tools/TASK.md) |
+| 19 | Apply spoken-language resolution to `download_transcript*`, `get_video_brief` and `search_playlist` (closes DECISION-022's deliberate scope cut) | [~] in progress — DoD approved 2026-09-20 | [docs/tasks/19-language-resolution-remaining-tools/TASK.md](tasks/19-language-resolution-remaining-tools/TASK.md) |
 
 ## Current status
 
@@ -201,6 +201,20 @@ auto-caption-only video — pending decision), which also inflates the
 brief's word stats until fixed. BUG-008's pending diagnostic work was
 committed first on its own branch (PR #29) so both changes to
 `fetchSegmentsFromYtDlp` stack cleanly.
+
+## Backlog (not scheduled)
+
+Ideas and research items that were deliberately parked, so a fresh session can
+find them without re-deriving them. Nothing here is approved work; anything
+promoted to a task gets a row in the table above and a `TASK.md`.
+
+| Item | Kind | Detail |
+|------|------|--------|
+| Playlist search: lazy retry-on-failure language resolution (Advise-recommended full fix for `search_playlist`) | improvement | [task 19, "Future improvements"](tasks/19-language-resolution-remaining-tools/TASK.md) |
+| Re-check whether translated-caption 429s are permanent or vary by network/time (n=4 on one network, one day) | research | [task 19, "Future improvements"](tasks/19-language-resolution-remaining-tools/TASK.md) |
+| Resolve the spoken language via yt-dlp's `<lang>-orig` track instead of the page scan | research | [task 19, "Future improvements"](tasks/19-language-resolution-remaining-tools/TASK.md) |
+| Name the spoken language inside the BUG-011 error for an explicit `en` on a non-English video | improvement | [task 19, "Out of scope"](tasks/19-language-resolution-remaining-tools/TASK.md) |
+| Cheaper `captionTracks` extraction than the `ytInitialPlayerRe` scan (~1 s on a real page) | improvement | [task 18 notes](tasks/18-native-language-fallback/TASK.md) |
 
 ## Resume checklist for next session
 
