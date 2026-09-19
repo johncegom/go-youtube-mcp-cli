@@ -794,6 +794,8 @@ Fix now (human decision, this session): **Option 3 only** — a clearer,
 
 No retry/backoff logic was added (Option 2, declined) — this session's own
 repro data (still 429ing 3+ hours and many retries later) showed retries
+
+**Amendment (2026-09-20, see BUG-011):** the root cause above (a separate, stricter quota for auto-generated captions) is now **unconfirmed**. A later investigation found that a 429 is also returned for any *translated* caption track (e.g. the default `en` on a non-English video), independent of quota, and that `5oer61Xyi4c`/`BqRhBq-_kgE` (both English) fetch fine with `en` today. Whether a real IP-wide auto-caption throttle exists remains open. The user-facing message written for this bug was reworded under BUG-011 so it no longer asserts one.
 don't reliably outrun YouTube's cooldown for this specific throttle.
 
 ---
@@ -867,3 +869,62 @@ Pending — awaiting human decision. Task 17 proceeds without changing
 fix here automatically corrects them. Until then, `get_video_brief`'s
 `Words`/`Speaking rate` on a `likely auto-generated` video should be read
 as ~3× too high.
+
+---
+
+## BUG-011: Transcript 429 on a *translated* caption track is reported as "network throttled, wait hours" — wrong diagnosis, and it corrects BUG-009's root cause
+
+- **Status:** fixed (message-only; branch `fix/bug-011-translated-track-429`)
+- **Discovered:** 2026-09-20, user-reported `get_transcript` failure on `r8CppXSqVDU` (Vietnamese speech, auto-captions only) with the BUG-009 message.
+- **Reachability: yes** — real call path (`get_transcript`/etc. → `normalizeLanguage` defaults to `"en"` → `fetchSegmentsFromYtDlp`, `internal/core/transcript.go`), hit by a real user in a real session. Every non-English video fetched without an explicit `language` goes through it.
+- **Inherited from upstream:** the `language` default of `"en"` is (TS default is `'en'`); the misleading message is ours (BUG-009's fix).
+
+### Symptom
+
+```
+YouTube is throttling auto-caption downloads for this network right now (video r8CppXSqVDU). This isn't a transient blip — it can take hours to clear after heavy usage, and retrying immediately won't help. Wait before trying again, or use a different network.
+```
+
+The message tells the user to wait hours or change network. For this video that is wrong: the same network, same minute, succeeds with the right language code.
+
+### Evidence (all 2026-09-20, same machine/network, yt-dlp 2026.07.04)
+
+| Video | Spoken language | Request | Result |
+|---|---|---|---|
+| `r8CppXSqVDU` | Vietnamese (ASR only) | `en` (the default) | **429** — via our CLI *and* via `yt-dlp --write-auto-subs --sub-langs en` directly |
+| `r8CppXSqVDU` | Vietnamese | `vi` | OK — full transcript |
+| `BqRhBq-_kgE` | English | `en` | OK |
+| `BqRhBq-_kgE` | English | `vi` | **429** (yt-dlp direct) |
+| `5oer61Xyi4c`, `dQw4w9WgXcQ` | English | `en` | OK |
+
+`yt-dlp --list-subs r8CppXSqVDU` lists `vi-orig` (the native ASR track) and offers `en` as one of ~100 machine-translated "automatic captions". Requesting a language other than the video's spoken one selects a *translated* track; that download is what 429s. The requested track's language, not the network, is the variable: the 429 flips with the language code on the same network and video.
+
+### Root cause
+
+For an auto-caption video, requesting a language that isn't the spoken one makes YouTube serve a machine-translated track, and that request is rejected with a 429 (at least today, from this network). `normalizeLanguage` defaults to `"en"`, so any non-English auto-caption video fetched with no `language` argument hits this. `classifyTranscriptError` maps every 429 to the "network throttled" text (BUG-009), so the actual remedy (pass the video's own language) is never surfaced.
+
+### Effect on BUG-009 (unresolved — needs a decision, not assumed)
+
+BUG-009 attributed its 429s to a separate, stricter quota for auto-generated captions. This entry shows that translated-track requests 429 independently of any accumulated quota, so that explanation is at best incomplete. It does **not** by itself explain BUG-009's original repro, because `5oer61Xyi4c` and `BqRhBq-_kgE` are English videos and both fetch fine with `en` today. Possible readings, none verified:
+- the original throttle was real and has since cleared (11 days later; no way to test retroactively);
+- the yt-dlp version changed between then and now (BUG-006 moved the pin from 2026.03.17 to 2026.07.04) and the older one selected a different track for `en`;
+- the BUG-009 note calls `5oer61Xyi4c` "~6.5 hours long" but its metadata now reports 20:36, so that note may have described a different video or been misrecorded.
+
+A real IP-wide auto-caption throttle is therefore neither confirmed nor ruled out; the current message asserts it as fact.
+
+### Options
+
+- **Message-only (smallest):** make the 429 text stop asserting a network-wide throttle, and add the language hint — e.g. "YouTube rejected the caption download (HTTP 429). If this video isn't in English, retry with `language` set to its spoken language (a translated track is what gets rejected); otherwise this may be a temporary throttle — wait or try another network." No behavior change.
+- **Auto-detect the spoken language when `language` is omitted:** feature, not a bug fix — needs the original-language signal from yt-dlp (`vi-orig`-style track / metadata) or the watch-page scrape. Changes the documented default; goes through the normal task-approval process.
+- **Fall back to the native track on a 429 for a translated request:** feature; adds a second yt-dlp call and a "which language did I actually return" disclosure to the result.
+- **Amend BUG-009's text** to link here and downgrade its root-cause claim to "unconfirmed" (docs only, could accompany the message fix).
+
+Recommendation: message-only fix plus the BUG-009 amendment now; treat auto-detect / fallback as a separate feature task for the human to schedule.
+
+### Decision
+
+Fix now (human decision, 2026-09-20): **message-only fix + BUG-009 amendment**, as recommended. Auto-detect / native-track fallback are left as a possible future feature task, not scheduled here.
+
+1. `TranscriptErrorText`'s `rate_limited` message (`internal/core/transcript.go`) no longer asserts a network-wide throttle. It now says YouTube rejected the download (HTTP 429), tells the user to set `language` to the video's spoken language if it isn't English (the default `"en"` selects a translated track), and otherwise mentions a possible temporary throttle. No signature or behavior change; `classifyTranscriptError` untouched.
+2. `TestTranscriptErrorText` updated first (red, then green) against the same captured yt-dlp 429 stderr; the rate-limited case's expected text is the new message.
+3. BUG-009 amended (below its Decision) to link here and downgrade its root cause to unconfirmed.
