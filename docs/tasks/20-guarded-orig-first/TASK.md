@@ -1,7 +1,7 @@
 # Task 20: Guarded orig-first transcript fetch (BUG-012 follow-up)
 
-**Status:** DRAFT rev 3 (2026-09-27; rev 2 + Program design revised after task 21) — Definition of Done + Test Plan **not yet
-approved by the human**; nothing here is implemented. Rev 2 incorporates an
+**Status:** APPROVED rev 3, not started (2026-09-27) — the human approved this Definition of Done + Test Plan
+(rev 3: rev 2 + Program design revised after task 21); **nothing here is implemented.** Next step: 20.0b (blocks coding the plan for non-English `L`). Rev 2 incorporates an
 Advise call (logged in `docs/eagd-log.md`) and four checks run against its
 claims (see "Review log"). Written on the `docs/bug-012-measurement-evidence`
 branch next to the evidence it rests on.
@@ -317,6 +317,5 @@ their tests are ported, not deleted.
 - 2026-09-27: **rev 3** after task 21 merged (PR #38): memo type and function
   names moved to `captionInfo`; 20.0b promoted to a gate for non-English `L`; no
   change to the approach or scope. Not re-Advised (mechanical revision, no new
-  judgement call). **Human re-approval of rev 3: pending** — status stays
-  DRAFT, not approved.
-- Human review: **pending.**
+  judgement call). Human re-approval of rev 3 was requested.
+- 2026-09-27: **Human review: rev 3 approved** ("approve task 20 rev 3"), after PR #39 merged. The approval covers the text as written; 20.0b remains a gate for the non-English part of the plan, and a result that changes the plan goes back to the human.
