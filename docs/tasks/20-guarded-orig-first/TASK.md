@@ -12,7 +12,13 @@ draft) shows `ResolveLanguage` resolving the wrong language (`en` for the
 Vietnamese `r8CppXSqVDU`), which breaks task 18's fix on a real video. That
 bug is user-visible on the *default path* and this task would only make the
 same wrong `L` fail faster. BUG-013 is also where any "what language does the
-video declare" signal belongs.
+video declare" signal belongs. Its fix is **task 21**
+(`docs/tasks/21-original-language-resolution/TASK.md`, DRAFT), which should land
+first. **This task's Program design must then be revised before it is
+implemented:** task 21 introduces a parsed `captionInfo{Tracks []captionTrack;
+AudioIDs []string}` with `parseCaptions` / `resolveFromCaptions`, so the track memo
+here should memoize `captionInfo` (not `[]captionTrack`), and `languageFromTracks`
+is replaced by `resolveFromCaptions`; `captionTrack` is defined by task 21.
 
 ## User need
 

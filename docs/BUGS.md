@@ -1071,7 +1071,7 @@ Next step: **task 20** (`docs/tasks/20-guarded-orig-first/TASK.md`, DRAFT, not a
 
 ## BUG-013: `resolveDefaultLanguage` returns `en` for a non-English video that now lists an `en-*` auto-caption track — task 18's BUG-011 fix no longer works on `r8CppXSqVDU`
 
-- **Status:** open
+- **Status:** tracked (task 21, DRAFT — fix not implemented)
 - **Discovered:** 2026-09-27, while reviewing the task 20 draft (an Advise call pointed at the rule; the live check confirmed it).
 - **Reachability: yes** — real call path: `get_transcript` / `get_transcript_timed` / `get_transcript_range` / `search_transcript` / `download_transcript*` / `get_video_brief` and the CLI `transcript` / `search` with `language` omitted → `ResolveLanguage` → `resolveDefaultLanguage` (`internal/core/language.go`). Reproduced through the CLI built from `main` (which includes tasks 18 and 19).
 
@@ -1128,4 +1128,6 @@ Task 20 (guarded orig-first, `docs/tasks/20-guarded-orig-first/TASK.md`, draft) 
 
 ### Decision
 
-Pending — human decision required.
+Human decision (2026-09-27): **option 1 — resolve from the `.4` audio-track id**, with this precedence for a video whose original language is known from it: uploaded subtitles in the original language first, else uploaded English, else the original-language auto track (the human, quoted: "if it has uploaded subtitles of their original language, use it first. If not, use the English"). The fix is tracked as **task 21** (`docs/tasks/21-original-language-resolution/TASK.md`, DRAFT — Definition of Done and Test Plan not yet approved; Advise run). Status is `tracked`, not `fixed`: nothing is implemented.
+
+Two points are **not** decided and are kept out of the fix: (1) whether the "uploaded original-language first" precedence should also apply to videos *without* the dubbing structure (a behaviour change on videos not in this bug; task 21 keeps them on today's rules and asks the human separately); (2) that "the English" means the *uploaded* English track (not auto English, which is the machine-translated request that 429s).
