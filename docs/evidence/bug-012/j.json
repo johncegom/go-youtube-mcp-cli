@@ -1,0 +1,500 @@
+[
+ {
+  "id": "5oer61Xyi4c",
+  "origin": "log",
+  "fetch_en": "429",
+  "fetch_orig": "ok",
+  "manual_en_keys": [],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "ar-orig",
+   "bn-orig",
+   "nl-NL-orig",
+   "en-orig",
+   "fr-FR-orig",
+   "de-DE-orig",
+   "iw-orig",
+   "hi-orig",
+   "id-orig",
+   "it-orig",
+   "ja-orig",
+   "ko-orig",
+   "ml-orig",
+   "pl-orig",
+   "pt-BR-orig",
+   "pa-orig",
+   "ru-orig",
+   "es-US-orig",
+   "ta-orig",
+   "te-orig",
+   "uk-orig"
+  ],
+  "en_url": {
+   "lang": "ar",
+   "tlang": "en",
+   "kind": "asr",
+   "variant": "timing-optimized"
+  },
+  "en_orig_url": {
+   "lang": "en",
+   "kind": "asr",
+   "variant": "gemini"
+  },
+  "manual_en_url": null,
+  "language": "en-US"
+ },
+ {
+  "id": "X0UI0O8YzJM",
+  "origin": "log",
+  "fetch_en": "ok",
+  "fetch_orig": "ok",
+  "manual_en_keys": [
+   "en"
+  ],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "en-orig"
+  ],
+  "en_url": {},
+  "en_orig_url": {
+   "lang": "en",
+   "kind": "asr"
+  },
+  "manual_en_url": {
+   "lang": "en"
+  },
+  "language": "en"
+ },
+ {
+  "id": "kjoQPn--F7A",
+  "origin": "log",
+  "fetch_en": "ok",
+  "fetch_orig": "ok",
+  "manual_en_keys": [
+   "en"
+  ],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "en-orig"
+  ],
+  "en_url": {},
+  "en_orig_url": {
+   "lang": "en",
+   "kind": "asr"
+  },
+  "manual_en_url": {
+   "lang": "en"
+  },
+  "language": "en"
+ },
+ {
+  "id": "r8CppXSqVDU",
+  "origin": "log",
+  "fetch_en": "429",
+  "fetch_orig": "none",
+  "manual_en_keys": [],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "en-US-orig",
+   "vi-orig"
+  ],
+  "en_url": {
+   "lang": "en-US",
+   "tlang": "en",
+   "kind": "asr",
+   "variant": "timing-optimized"
+  },
+  "en_orig_url": null,
+  "manual_en_url": null,
+  "language": "vi"
+ },
+ {
+  "id": "BqRhBq-_kgE",
+  "origin": "log",
+  "fetch_en": "429",
+  "fetch_orig": "ok",
+  "manual_en_keys": [],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "ar-orig",
+   "bn-orig",
+   "nl-NL-orig",
+   "en-orig",
+   "fr-FR-orig",
+   "de-DE-orig",
+   "iw-orig",
+   "hi-orig",
+   "id-orig",
+   "it-orig",
+   "ja-orig",
+   "ko-orig",
+   "ml-orig",
+   "pl-orig",
+   "pt-BR-orig",
+   "pa-orig",
+   "ru-orig",
+   "es-US-orig",
+   "ta-orig",
+   "te-orig",
+   "uk-orig"
+  ],
+  "en_url": {
+   "lang": "ar",
+   "tlang": "en",
+   "kind": "asr",
+   "variant": "timing-optimized"
+  },
+  "en_orig_url": {
+   "lang": "en",
+   "kind": "asr",
+   "variant": "gemini"
+  },
+  "manual_en_url": null,
+  "language": "en-US"
+ },
+ {
+  "id": "I8XaYkRW1tA",
+  "origin": "log",
+  "fetch_en": "ok",
+  "fetch_orig": "none",
+  "manual_en_keys": [
+   "en"
+  ],
+  "auto_has_en": true,
+  "auto_orig_keys": [],
+  "en_url": {},
+  "en_orig_url": null,
+  "manual_en_url": {
+   "lang": "en"
+  },
+  "language": null
+ },
+ {
+  "id": "vyIgAO8aCbA",
+  "origin": "log",
+  "fetch_en": "429",
+  "fetch_orig": "ok",
+  "manual_en_keys": [],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "ar-orig",
+   "bn-orig",
+   "nl-NL-orig",
+   "en-orig",
+   "fr-FR-orig",
+   "de-DE-orig",
+   "iw-orig",
+   "hi-orig",
+   "id-orig",
+   "it-orig",
+   "ja-orig",
+   "ko-orig",
+   "ml-orig",
+   "pl-orig",
+   "pt-BR-orig",
+   "pa-orig",
+   "ru-orig",
+   "es-US-orig",
+   "ta-orig",
+   "te-orig",
+   "uk-orig"
+  ],
+  "en_url": {
+   "lang": "ar",
+   "tlang": "en",
+   "kind": "asr",
+   "variant": "timing-optimized"
+  },
+  "en_orig_url": {
+   "lang": "en",
+   "kind": "asr",
+   "variant": "gemini"
+  },
+  "manual_en_url": null,
+  "language": "en-US"
+ },
+ {
+  "id": "qN6OM1IzjIE",
+  "origin": "log",
+  "fetch_en": "429",
+  "fetch_orig": "ok",
+  "manual_en_keys": [],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "ar-orig",
+   "bn-orig",
+   "nl-NL-orig",
+   "en-orig",
+   "fr-FR-orig",
+   "de-DE-orig",
+   "iw-orig",
+   "hi-orig",
+   "id-orig",
+   "it-orig",
+   "ja-orig",
+   "ko-orig",
+   "ml-orig",
+   "pl-orig",
+   "pt-BR-orig",
+   "ru-orig",
+   "es-US-orig",
+   "uk-orig"
+  ],
+  "en_url": {
+   "lang": "ar",
+   "tlang": "en",
+   "kind": "asr",
+   "variant": "timing-optimized"
+  },
+  "en_orig_url": {
+   "lang": "en",
+   "kind": "asr"
+  },
+  "manual_en_url": null,
+  "language": "en-US"
+ },
+ {
+  "id": "vsGwx28z4jk",
+  "origin": "log",
+  "fetch_en": "429",
+  "fetch_orig": "ok",
+  "manual_en_keys": [],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "ar-orig",
+   "bn-orig",
+   "nl-NL-orig",
+   "en-orig",
+   "fr-FR-orig",
+   "de-DE-orig",
+   "iw-orig",
+   "hi-orig",
+   "id-orig",
+   "it-orig",
+   "ja-orig",
+   "ko-orig",
+   "ml-orig",
+   "pl-orig",
+   "pt-BR-orig",
+   "pa-orig",
+   "ru-orig",
+   "es-US-orig",
+   "ta-orig",
+   "te-orig",
+   "uk-orig"
+  ],
+  "en_url": {
+   "lang": "ar",
+   "tlang": "en",
+   "kind": "asr",
+   "variant": "timing-optimized"
+  },
+  "en_orig_url": {
+   "lang": "en",
+   "kind": "asr",
+   "variant": "gemini"
+  },
+  "manual_en_url": null,
+  "language": "en-US"
+ },
+ {
+  "id": "LXb3EKWsInQ",
+  "origin": "log",
+  "fetch_en": "none",
+  "fetch_orig": "none",
+  "manual_en_keys": [],
+  "auto_has_en": false,
+  "auto_orig_keys": [],
+  "en_url": null,
+  "en_orig_url": null,
+  "manual_en_url": null,
+  "language": null
+ },
+ {
+  "id": "QcdpeFbuy8o",
+  "origin": "log",
+  "fetch_en": "429",
+  "fetch_orig": "ok",
+  "manual_en_keys": [],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "ar-orig",
+   "bn-orig",
+   "nl-NL-orig",
+   "en-orig",
+   "fr-FR-orig",
+   "de-DE-orig",
+   "iw-orig",
+   "hi-orig",
+   "id-orig",
+   "it-orig",
+   "ja-orig",
+   "ko-orig",
+   "ml-orig",
+   "pl-orig",
+   "pt-BR-orig",
+   "pa-orig",
+   "ru-orig",
+   "es-US-orig",
+   "ta-orig",
+   "te-orig",
+   "uk-orig"
+  ],
+  "en_url": {
+   "lang": "ar",
+   "tlang": "en",
+   "kind": "asr",
+   "variant": "timing-optimized"
+  },
+  "en_orig_url": {
+   "lang": "en",
+   "kind": "asr"
+  },
+  "manual_en_url": null,
+  "language": "en-US"
+ },
+ {
+  "id": "KcVkq5L-0f0",
+  "origin": "log",
+  "fetch_en": "429",
+  "fetch_orig": "ok",
+  "manual_en_keys": [],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "ar-orig",
+   "bn-orig",
+   "nl-NL-orig",
+   "en-orig",
+   "fr-FR-orig",
+   "de-DE-orig",
+   "iw-orig",
+   "hi-orig",
+   "id-orig",
+   "it-orig",
+   "ja-orig",
+   "ko-orig",
+   "ml-orig",
+   "pl-orig",
+   "pt-BR-orig",
+   "pa-orig",
+   "ru-orig",
+   "es-US-orig",
+   "ta-orig",
+   "te-orig",
+   "uk-orig"
+  ],
+  "en_url": {
+   "lang": "ar",
+   "tlang": "en",
+   "kind": "asr",
+   "variant": "timing-optimized"
+  },
+  "en_orig_url": {
+   "lang": "en",
+   "kind": "asr",
+   "variant": "gemini"
+  },
+  "manual_en_url": null,
+  "language": "en-US"
+ },
+ {
+  "id": "dQw4w9WgXcQ",
+  "origin": "log",
+  "fetch_en": "ok",
+  "fetch_orig": "ok",
+  "manual_en_keys": [
+   "en"
+  ],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "en-orig"
+  ],
+  "en_url": {},
+  "en_orig_url": {
+   "lang": "en",
+   "kind": "asr"
+  },
+  "manual_en_url": {
+   "lang": "en"
+  },
+  "language": "en"
+ },
+ {
+  "id": "9EUTRL_4Cj8",
+  "origin": "log",
+  "fetch_en": "429",
+  "fetch_orig": "none",
+  "manual_en_keys": [],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "vi-orig"
+  ],
+  "en_url": {
+   "lang": "vi",
+   "tlang": "en",
+   "kind": "asr"
+  },
+  "en_orig_url": null,
+  "manual_en_url": null,
+  "language": "vi"
+ },
+ {
+  "id": "qp0HIF3SfI4",
+  "origin": "control",
+  "fetch_en": "ok",
+  "fetch_orig": "none",
+  "manual_en_keys": [
+   "en"
+  ],
+  "auto_has_en": true,
+  "auto_orig_keys": [],
+  "en_url": {},
+  "en_orig_url": null,
+  "manual_en_url": {
+   "lang": "en"
+  },
+  "language": null
+ },
+ {
+  "id": "iG9CE55wbtY",
+  "origin": "control",
+  "fetch_en": "ok",
+  "fetch_orig": "ok",
+  "manual_en_keys": [
+   "en"
+  ],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "en-orig"
+  ],
+  "en_url": {},
+  "en_orig_url": {
+   "lang": "en",
+   "kind": "asr"
+  },
+  "manual_en_url": {
+   "lang": "en"
+  },
+  "language": "en"
+ },
+ {
+  "id": "UF8uR6Z6KLc",
+  "origin": "control",
+  "fetch_en": "ok",
+  "fetch_orig": "ok",
+  "manual_en_keys": [
+   "en-eEY6OEpapPo"
+  ],
+  "auto_has_en": true,
+  "auto_orig_keys": [
+   "en-orig"
+  ],
+  "en_url": {},
+  "en_orig_url": {
+   "lang": "en",
+   "kind": "asr"
+  },
+  "manual_en_url": null,
+  "language": "en"
+ }
+]

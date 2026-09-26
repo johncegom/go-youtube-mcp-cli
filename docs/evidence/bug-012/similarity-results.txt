@@ -1,0 +1,22 @@
+# Output of the throwaway Go scorer (score_pairs_test.go.txt) over manifest.json's pairs, 2026-09-26.
+# Pairs are scored only when BOTH tracks downloaded. similarity = word-level LCS ratio (2*LCS/(n+m))
+# over the app's own parseVtt + transcriptText output, lower-cased. kind_* = detectCaptionKind on the raw VTT.
+# yt-dlp 2026.07.04, flags as the app uses them. Fields: id|origin|en=<status>|orig=<status>|...
+5oer61Xyi4c|log|en=429|orig=ok
+X0UI0O8YzJM|log|en=ok|orig=ok|words_en=1575|words_orig=1586|similarity=0.954|kind_en=uploaded|kind_orig=auto
+kjoQPn--F7A|log|en=ok|orig=ok|words_en=2335|words_orig=2367|similarity=0.929|kind_en=uploaded|kind_orig=auto
+r8CppXSqVDU|log|en=429|orig=none
+BqRhBq-_kgE|log|en=429|orig=ok
+I8XaYkRW1tA|log|en=ok|orig=none
+vyIgAO8aCbA|log|en=429|orig=ok
+qN6OM1IzjIE|log|en=429|orig=ok
+vsGwx28z4jk|log|en=429|orig=ok
+LXb3EKWsInQ|log|en=none|orig=none
+QcdpeFbuy8o|log|en=429|orig=ok
+osLrm8nve_A|log|en=other:Video unavailable|orig=other:Video unavailable
+KcVkq5L-0f0|log|en=429|orig=ok
+dQw4w9WgXcQ|log|en=ok|orig=ok|words_en=487|words_orig=291|similarity=0.442|kind_en=uploaded|kind_orig=auto
+9EUTRL_4Cj8|log|en=429|orig=none
+qp0HIF3SfI4|control|en=ok|orig=none
+iG9CE55wbtY|control|en=ok|orig=ok|words_en=3170|words_orig=3337|similarity=0.754|kind_en=uploaded|kind_orig=auto
+UF8uR6Z6KLc|control|en=ok|orig=ok|words_en=2314|words_orig=2314|similarity=1.000|kind_en=auto|kind_orig=auto

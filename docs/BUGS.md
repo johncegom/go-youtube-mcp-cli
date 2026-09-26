@@ -1053,3 +1053,15 @@ Graded by a fresh haiku call against the Definition of Done above: 6/6 pass. Two
 The retry only runs after a 429. On two other CLI runs of `vyIgAO8aCbA` plain `en` did **not** 429 (no failure logged) and returned a different, lower-quality text — a machine back-translation (uk → en): "a clarifying question… Jack Saling… 'mem' stocks", against the genuine track's "a follow-up question on that then… Jack saying…". So on this video a "successful" plain `en` can silently serve the back-translation, and this fix does not prevent that. The genuine track is only guaranteed by asking for `en-orig` first (option 2), which regresses videos with uploaded English subtitles unless guarded. Also unexplained: at the same minute, direct `yt-dlp 2026.07.04 --sub-langs en` 429'd on this video while the CLI's plain `en` did not (flag differences: the CLI adds `--ffmpeg-location`, `--verbose`), so the 429 is intermittent, contrary to the "4 of 4" above.
 
 Status stays `open` until the human decides whether to leave that limitation, or schedule an orig-first follow-up.
+
+### Follow-up measurement (2026-09-26/27) — full evidence in `docs/evidence/bug-012/`
+
+Raw data, scripts, per-video table, environment and every caveat are in [`docs/evidence/bug-012/README.md`](evidence/bug-012/README.md); this is the summary. 17 usable videos, yt-dlp 2026.07.04, one machine/network, one pass; **15 of the 18 IDs came from the failure-only `errors.log`, so the 429 rate says nothing about prevalence.**
+
+- Plain `en` returned 429 on 9/17; `en-orig` recovered 7 of those 9 (the other two have no English original). Every 429 was on an auto-caption-only video; every video with an uploaded English track succeeded on plain `en`.
+- A `tlang=` parameter in the auto-caption `en` URL matched the 429 on all 17 (9/9 rejected, 7/7 accepted, 1 caption-less). Mechanism seen on `vyIgAO8aCbA`: yt-dlp maps `en` to a translation of the first of ~21 `-orig` tracks (`lang=ar&tlang=en` with 2026.07.04, `lang=uk&tlang=en` in the app's 2026.08.19 log). Why it does so: unknown.
+- Orig-first without a guard is confirmed to regress: with an uploaded track present, `en-orig` is the auto track and reads 0.44–0.95 similar to the uploaded one.
+- The watch page's `captionTracks` (already scraped by the app) marked "uploaded English track exists" identically to yt-dlp's own list on 17/17, so a guard needs no extra yt-dlp run. The rule "uploaded → plain `en`; else `en-orig` if listed; else plain `en`" picked a request that returned a transcript on 14/17, and the other 3 (no English original / no captions) fall back to today's behaviour.
+- **Not measured:** how often the silent back-translation happens (n = 2 runs on one video; 0 of 9 `tlang` URLs succeeded in the sample), any yt-dlp version other than 2026.07.04, non-`en` languages, and whether `en-orig` is genuine on a *non-English-speech* video with the many-track structure.
+
+Proposed next step (not yet a task): a guarded orig-first fetch driven by `captionTracks`, keeping the shipped retry as the safety net.

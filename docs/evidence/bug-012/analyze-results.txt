@@ -1,0 +1,41 @@
+id           origin  manual_en auto_en en-orig tlang fetch_en  fetch_orig
+5oer61Xyi4c  log     False     True    True    yes   429       ok        
+X0UI0O8YzJM  log     True      True    True    no    ok        ok        
+kjoQPn--F7A  log     True      True    True    no    ok        ok        
+r8CppXSqVDU  log     False     True    False   yes   429       none      
+BqRhBq-_kgE  log     False     True    True    yes   429       ok        
+I8XaYkRW1tA  log     True      True    False   no    ok        none      
+vyIgAO8aCbA  log     False     True    True    yes   429       ok        
+qN6OM1IzjIE  log     False     True    True    yes   429       ok        
+vsGwx28z4jk  log     False     True    True    yes   429       ok        
+LXb3EKWsInQ  log     False     False   False   -     none      none      
+QcdpeFbuy8o  log     False     True    True    yes   429       ok        
+KcVkq5L-0f0  log     False     True    True    yes   429       ok        
+dQw4w9WgXcQ  log     True      True    True    no    ok        ok        
+9EUTRL_4Cj8  log     False     True    False   yes   429       none      
+qp0HIF3SfI4  control True      True    False   no    ok        none      
+iG9CE55wbtY  control True      True    True    no    ok        ok        
+UF8uR6Z6KLc  control True      True    True    no    ok        ok        
+
+H1 tlang vs 429 mismatches: []
+
+H2 rule outcomes (choice -> fetch status of that choice):
+  5oer61Xyi4c  choose=en-orig  -> ok
+  X0UI0O8YzJM  choose=en       -> ok
+  kjoQPn--F7A  choose=en       -> ok
+  r8CppXSqVDU  choose=en       -> 429
+  BqRhBq-_kgE  choose=en-orig  -> ok
+  I8XaYkRW1tA  choose=en       -> ok
+  vyIgAO8aCbA  choose=en-orig  -> ok
+  qN6OM1IzjIE  choose=en-orig  -> ok
+  vsGwx28z4jk  choose=en-orig  -> ok
+  LXb3EKWsInQ  choose=en       -> none
+  QcdpeFbuy8o  choose=en-orig  -> ok
+  KcVkq5L-0f0  choose=en-orig  -> ok
+  dQw4w9WgXcQ  choose=en       -> ok
+  9EUTRL_4Cj8  choose=en       -> 429
+  qp0HIF3SfI4  choose=en       -> ok
+  iG9CE55wbtY  choose=en       -> ok
+  UF8uR6Z6KLc  choose=en       -> ok
+
+choices that did NOT yield a transcript: [('r8CppXSqVDU', 'en', '429', '429', 'none'), ('LXb3EKWsInQ', 'en', 'none', 'none', 'none'), ('9EUTRL_4Cj8', 'en', '429', '429', 'none')]

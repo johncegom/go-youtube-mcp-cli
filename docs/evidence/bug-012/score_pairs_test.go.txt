@@ -1,0 +1,82 @@
+// THROWAWAY scorer used for the BUG-012 measurement, kept as a .txt so it is not compiled.
+// To reuse: copy to internal/core/zz_measure_tmp_test.go (it needs package-internal
+// parseVtt/transcriptText/detectCaptionKind), run
+//   MEASURE_MANIFEST=<path to manifest.json> go test ./internal/core/ -run TestZZMeasure -count=1 -v
+// and DELETE the file afterwards (it must not be committed). NOTE: manifest.json in this folder has
+// its "path" fields reduced to file names, so pairs can only be re-scored after re-running
+// measure.py, which writes full paths.
+package core
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+)
+
+func lcsRatio(a, b []string) float64 {
+	if len(a) == 0 && len(b) == 0 {
+		return 1
+	}
+	prev := make([]int, len(b)+1)
+	cur := make([]int, len(b)+1)
+	for i := 1; i <= len(a); i++ {
+		for j := 1; j <= len(b); j++ {
+			if a[i-1] == b[j-1] {
+				cur[j] = prev[j-1] + 1
+			} else if prev[j] >= cur[j-1] {
+				cur[j] = prev[j]
+			} else {
+				cur[j] = cur[j-1]
+			}
+		}
+		prev, cur = cur, prev
+	}
+	return 2 * float64(prev[len(b)]) / float64(len(a)+len(b))
+}
+
+func words(path string) ([]string, string) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, ""
+	}
+	s := string(raw)
+	segs := parseVtt(s)
+	return strings.Fields(strings.ToLower(transcriptText(segs))), string(detectCaptionKind(s))
+}
+
+func TestZZMeasure(t *testing.T) {
+	mp := os.Getenv("MEASURE_MANIFEST")
+	if mp == "" {
+		t.Skip("no manifest")
+	}
+	raw, err := os.ReadFile(mp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows []struct {
+		ID     string `json:"id"`
+		Origin string `json:"origin"`
+		En     struct {
+			Status string  `json:"status"`
+			Path   *string `json:"path"`
+		} `json:"en"`
+		Orig struct {
+			Status string  `json:"status"`
+			Path   *string `json:"path"`
+		} `json:"en-orig"`
+	}
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		line := fmt.Sprintf("%s|%s|en=%s|orig=%s", r.ID, r.Origin, r.En.Status, r.Orig.Status)
+		if r.En.Path != nil && r.Orig.Path != nil {
+			a, ka := words(*r.En.Path)
+			b, kb := words(*r.Orig.Path)
+			line += fmt.Sprintf("|words_en=%d|words_orig=%d|similarity=%.3f|kind_en=%s|kind_orig=%s", len(a), len(b), lcsRatio(a, b), ka, kb)
+		}
+		fmt.Println("RESULT " + line)
+	}
+}
