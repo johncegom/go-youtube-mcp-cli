@@ -86,7 +86,11 @@ Reading the table:
 - **When plain `en` succeeded on an auto track (`UF8uR6Z6KLc`, n = 1) it was identical to `en-orig`.**
 - **Every 429 in the sample was on an auto-caption-only video; every video with an uploaded English track
   succeeded on plain `en`.** With 15/18 IDs chosen from failures this is an observation about the sample, not an
-  established rule.
+  established rule. **Correction (2026-09-27):** the `manual_en` column above uses a loose `en` / `en-*` test.
+  For `UF8uR6Z6KLc` the uploaded key is `en-eEY6OEpapPo`, not `en`, and plain `en` returned its **auto** track
+  (hence "auto / auto", similarity 1.000). So plain `en` succeeded on all 7 videos with an uploaded English track,
+  but it is confirmed to have returned the *uploaded* track on 4 (`X0UI0O8YzJM`, `kjoQPn--F7A`, `dQw4w9WgXcQ`,
+  `iG9CE55wbtY`); on `I8XaYkRW1tA` and `qp0HIF3SfI4` the kind was not scored, and on `UF8uR6Z6KLc` it was auto.
 - **Watch page vs yt-dlp agree on "uploaded English track exists": 17 / 17** (`pagecheck-results.txt`,
   non-`asr` track with `languageCode` `en`/`en-*`). So the guard needs no extra yt-dlp run.
 
@@ -132,6 +136,32 @@ returned 429, so the CLI and a bare yt-dlp disagreed (flag differences: the app 
 `--verbose`; cause unknown). In the 17-video sample no such silent success on a `tlang` URL occurred (0 of 9), so
 the frequency of this failure mode is **unmeasured**: n = 2 runs on one video.
 
+## Findings added 2026-09-27 (while reviewing the draft of task 20)
+
+Run after the main measurement, on the same 17 videos, with the saved scripts (`pagecodes.py` →
+`pagecodes-results.txt`); plus two one-off live checks.
+
+- **Page track codes ⇔ yt-dlp `-orig` keys.** "The watch page lists an auto-generated (`asr`) track whose
+  `languageCode` is exactly `en`" matched "yt-dlp lists `en-orig`" on **17 / 17** videos, 0 mismatches. The 7
+  many-track videos all have `asr` `en`; `r8CppXSqVDU` has `en-US` + `vi` (no exact `en`, and yt-dlp lists
+  `en-US-orig`, `vi-orig`, not `en-orig`); `9EUTRL_4Cj8` has one non-English `asr` track. This is the signal
+  that separates "`-orig` will exist" from "it will not", using data the app already scrapes.
+- **yt-dlp's own `language` field** (in `j.json`, per video): `vi` for `r8CppXSqVDU` and `9EUTRL_4Cj8`, `en-US`
+  for the 7 many-track videos, `en` for 5 others, `None` for the 3 with no auto-caption tracks
+  (`I8XaYkRW1tA`, `LXb3EKWsInQ`, `qp0HIF3SfI4`). It matches every video's known language (English speech
+  confirmed by reading `vyIgAO8aCbA`; Vietnamese for `r8CppXSqVDU` from BUG-011; the other labels are
+  yt-dlp's word, not independently checked). Where yt-dlp obtains it, and whether the watch page carries an
+  equivalent, is **unverified**. It is the candidate signal for BUG-013.
+- **The timedtext URL is printed on a *successful* fetch** with yt-dlp 2026.07.04 and `--verbose`
+  (`[debug] Invoking http downloader on "https://www.youtube.com/api/timedtext?…"`, checked on
+  `UF8uR6Z6KLc`), so a `tlang=` in it could be logged on success. For the app's 2026.08.19 the line was only seen
+  on failure (that binary is gone); **unverified on success**.
+- **BUG-013 observed live.** The branch-built CLI (tasks 18 + 19 included), `youtube-cli transcript
+  r8CppXSqVDU` with no language, resolves `en` and fails with the BUG-011 429; page tracks are
+  `[('en-US','asr'), ('vi','asr')]`. `--language vi` still returns the Vietnamese transcript. Logged as
+  `docs/BUGS.md` BUG-013; it is a different mechanism from BUG-012 (wrong language chosen, not a bad request for
+  the right one).
+
 ## What was NOT measured
 
 - Prevalence across YouTube (the sample is failure-biased) and stability over time (single pass, one day).
@@ -152,6 +182,7 @@ the frequency of this failure mode is **unmeasured**: n = 2 runs on one video.
 | `j.json` | Its output (only URL *parameters* are stored, never signed URLs). |
 | `analyze.py` → `analyze-results.txt` | Joins the two and tests H1 (tlang ⇔ 429) and H2 (the rule). |
 | `pagecheck.py` → `pagecheck-results.txt` | Compares the watch page's uploaded-track marking with yt-dlp's (plain GETs, no yt-dlp). |
+| `pagecodes.py` → `pagecodes-results.txt` | Per-track page codes (`asr` / uploaded) joined with yt-dlp's `-orig` keys, `language` field and uploaded-`en` keys; tests "exact `asr` `en` on the page ⇔ yt-dlp lists `en-orig`" (0 mismatches / 17). Plain GETs, no yt-dlp. |
 | `score_pairs_test.go.txt` → `similarity-results.txt` | The throwaway Go scorer (kept as `.txt`, not compiled) and its output: word-level similarity using the app's own `parseVtt`. |
 
 ## Re-running
@@ -162,6 +193,7 @@ python measure.py        # ~10 min, 36 yt-dlp runs; writes manifest.json and vtt
 python jcheck.py         # ~3 min, 17 yt-dlp -J runs; writes j.json
 python analyze.py
 python pagecheck.py
+python pagecodes.py
 ```
 
 `measure.py` and `jcheck.py` expect `%LOCALAPPDATA%\go-ytdlp\yt-dlp-2026.07.04.exe` (edit `YTDLP` to change the
@@ -170,6 +202,6 @@ YouTube's behaviour has moved; treat the files in this folder as a dated snapsho
 
 ## Related
 
-`docs/BUGS.md` BUG-012 (decision, shipped retry, known limitation); PR #36 (the retry and the
-`transcript_fetch_orig_retry` log line). A guarded orig-first task built on this evidence is proposed but not
-yet drafted.
+`docs/BUGS.md` BUG-012 (decision, shipped retry, known limitation) and BUG-013 (wrong resolved language, found
+while reviewing task 20); PR #36 (the retry and the `transcript_fetch_orig_retry` log line);
+`docs/tasks/20-guarded-orig-first/TASK.md` (draft, not approved).
