@@ -1,0 +1,142 @@
+[
+ {
+  "id": "r8CppXSqVDU",
+  "L": "vi",
+  "order": [
+   "vi",
+   "vi-orig"
+  ],
+  "vi": {
+   "status": "ok",
+   "seconds": 6.3,
+   "chars": 48245
+  },
+  "vi-orig": {
+   "status": "ok",
+   "seconds": 3.8,
+   "chars": 48245
+  },
+  "similarity": 1.0,
+  "identical": true
+ },
+ {
+  "id": "B9MBdB1Ih6Q",
+  "L": "vi",
+  "order": [
+   "vi-orig",
+   "vi"
+  ],
+  "vi-orig": {
+   "status": "ok",
+   "seconds": 3.7,
+   "chars": 36023
+  },
+  "vi": {
+   "status": "ok",
+   "seconds": 3.7,
+   "chars": 36023
+  },
+  "similarity": 1.0,
+  "identical": true
+ },
+ {
+  "id": "Za_PoC0D3CQ",
+  "L": "vi",
+  "order": [
+   "vi",
+   "vi-orig"
+  ],
+  "vi": {
+   "status": "ok",
+   "seconds": 4.3,
+   "chars": 45615
+  },
+  "vi-orig": {
+   "status": "ok",
+   "seconds": 3.9,
+   "chars": 45615
+  },
+  "similarity": 1.0,
+  "identical": true
+ },
+ {
+  "id": "fdkYE4uxL0A",
+  "L": "vi",
+  "order": [
+   "vi-orig",
+   "vi"
+  ],
+  "vi-orig": {
+   "status": "ok",
+   "seconds": 3.7,
+   "chars": 72587
+  },
+  "vi": {
+   "status": "ok",
+   "seconds": 3.7,
+   "chars": 72581
+  },
+  "similarity": 0.87,
+  "identical": false
+ },
+ {
+  "id": "cZSgL76ddDs",
+  "L": "de",
+  "order": [
+   "de",
+   "de-orig"
+  ],
+  "de": {
+   "status": "ok",
+   "seconds": 3.8,
+   "chars": 23849
+  },
+  "de-orig": {
+   "status": "ok",
+   "seconds": 3.4,
+   "chars": 23849
+  },
+  "similarity": 1.0,
+  "identical": true
+ },
+ {
+  "id": "0n5AYXkXP3Y",
+  "L": "de",
+  "order": [
+   "de-orig",
+   "de"
+  ],
+  "de-orig": {
+   "status": "ok",
+   "seconds": 3.6,
+   "chars": 22841
+  },
+  "de": {
+   "status": "ok",
+   "seconds": 3.8,
+   "chars": 9077
+  },
+  "similarity": 0.511,
+  "identical": false
+ },
+ {
+  "id": "iLnTZhrkUpA",
+  "L": "de",
+  "order": [
+   "de",
+   "de-orig"
+  ],
+  "de": {
+   "status": "ok",
+   "seconds": 3.7,
+   "chars": 12830
+  },
+  "de-orig": {
+   "status": "ok",
+   "seconds": 3.8,
+   "chars": 32140
+  },
+  "similarity": 0.511,
+  "identical": false
+ }
+]
