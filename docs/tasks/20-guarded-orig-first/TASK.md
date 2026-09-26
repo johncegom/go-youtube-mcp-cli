@@ -1,25 +1,24 @@
 # Task 20: Guarded orig-first transcript fetch (BUG-012 follow-up)
 
-**Status:** DRAFT rev 2 (2026-09-27) — Definition of Done + Test Plan **not yet
+**Status:** DRAFT rev 3 (2026-09-27; rev 2 + Program design revised after task 21) — Definition of Done + Test Plan **not yet
 approved by the human**; nothing here is implemented. Rev 2 incorporates an
 Advise call (logged in `docs/eagd-log.md`) and four checks run against its
 claims (see "Review log"). Written on the `docs/bug-012-measurement-evidence`
 branch next to the evidence it rests on.
 
-**Sequencing note — decide BUG-013 first.** This task assumes the language `L`
-it is handed is right. `docs/BUGS.md` BUG-013 (found while reviewing this
-draft) shows `ResolveLanguage` resolving the wrong language (`en` for the
-Vietnamese `r8CppXSqVDU`), which breaks task 18's fix on a real video. That
-bug is user-visible on the *default path* and this task would only make the
-same wrong `L` fail faster. BUG-013 is also where any "what language does the
-video declare" signal belongs. Its fix is **task 21**
-(`docs/tasks/21-original-language-resolution/TASK.md`, implemented on branch
-`fix/bug-013-original-language` 2026-09-27, awaiting merge), which should land
-first; `captionInfo`, `parseCaptions`, `resolveFromCaptions` now exist in `internal/core/language.go`. **This task's Program design must then be revised before it is
-implemented:** task 21 introduces a parsed `captionInfo{Tracks []captionTrack;
-AudioIDs []string}` with `parseCaptions` / `resolveFromCaptions`, so the track memo
-here should memoize `captionInfo` (not `[]captionTrack`), and `languageFromTracks`
-is replaced by `resolveFromCaptions`; `captionTrack` is defined by task 21.
+**Sequencing note — task 21 has landed (PR #38, 2026-09-27); Program design
+revised the same day (rev 3).** This task assumes the language `L` it is handed
+is right; BUG-013 (`ResolveLanguage` returning `en` for the Vietnamese
+`r8CppXSqVDU`) was fixed by task 21, which added
+`captionInfo{Tracks []captionTrack; AudioIDs []string}`, `parseCaptions` and
+`resolveFromCaptions` to `internal/core/language.go`. This task builds on them:
+the memo holds `captionInfo`, `parseCaptionTracks` and `languageFromTracks` are
+**not** added (they are `parseCaptions` and `resolveFromCaptions`), and
+`captionTrack` is not redefined. **What task 21 changes for this task's
+evidence:** `L` may now be a *non-English* code (`vi`, `de`, `de-DE`) on the
+default path, so the plan `[L-orig, L]` will fire for auto-caption-only
+non-English videos too. Whether `L-orig` is genuine there is exactly 20.0b —
+it is no longer "informative", see 20.0b and 20.7.
 
 ## User need
 
@@ -63,7 +62,7 @@ Decide the attempt order **before** the first yt-dlp call, from the track list
 **only if it is already in memory**; keep the BUG-012 retry as the safety net.
 
 1. **Peek, do not fetch.** The fetch funnel reads the per-video track memo
-   without any network call (`peekCaptionTracks`). Omitted-language callers
+   without any network call (`peekCaptionInfo`). Omitted-language callers
    have it warm (`ResolveLanguage` ran first); explicit-language callers and
    `search_playlist` do not, and get today's `[L]` + BUG-012 retry. So this task
    adds **no request and no latency**, and leaves DECISION-022's playlist scope
@@ -103,19 +102,23 @@ Explicitly **not** doing:
 
 `[x]` done · `[ ]` not started. Numbering follows task 10's sub-task pattern.
 
-- [ ] 20.0 **Research (informative; none of these blocks coding)** — a negative
+- [ ] 20.0 **Research (20.0b now gates the plan for non-English `L`; the rest are informative)** — a negative
   or "could not find one" result is a valid outcome, recorded in
   `docs/evidence/bug-012/`:
   - [x] 20.0a *Page track codes vs yt-dlp `-orig` keys* — done 2026-09-27:
     `pagecodes.py` / `pagecodes-results.txt`, 0 mismatches / 17. (Replaces the
     earlier "exact vs prefix" gate: the artifacts already settle it, see
     Approach.)
-  - [ ] 20.0b *Non-English speech with the many-track structure.* What does
-    `en-orig` return there: nothing, or a machine translation? Informative for
-    this task (if a translation, revisit the plan for an explicit `en`); more
-    importantly it may show BUG-013's second half (`ResolveLanguage` returning
-    `en` for every video that lists an `asr` `en` track). Do **not** fold a
-    fix into this task; log it under BUG-013.
+  - [ ] 20.0b **(blocks coding the plan for non-English `L`)** *Is `<L>-orig`
+    genuine for non-English speech?* Task 21 made the default `L` a track's own
+    code (`vi`, `de`); task 21's live check saw `de-orig` return the identical
+    file as `de` on `cZSgL76ddDs`, and plain `vi`/`de` fetch real transcripts,
+    so the plan `[vi-orig, vi]` could be a wasted attempt or harmless. Measure
+    on `r8CppXSqVDU`, `B9MBdB1Ih6Q`, `Za_PoC0D3CQ`, `fdkYE4uxL0A`, `cZSgL76ddDs`,
+    `0n5AYXkXP3Y`, `iLnTZhrkUpA`: does `<L>-orig` exist, does it 429, does it
+    differ from plain `<L>`? If it adds nothing, restrict the plan to
+    `L` whose base is `en`. (The BUG-013 half of the old question is closed by
+    task 21.)
   - [ ] 20.0c *A sample not drawn from `errors.log`* (≥ 10 videos, mixed
     languages, with and without uploaded subtitles) with the saved scripts.
   - [ ] 20.0d *Is the timedtext URL printed on a **successful** fetch by the
@@ -123,19 +126,21 @@ Explicitly **not** doing:
     `[debug] Invoking http downloader on "…timedtext…"`); the app's
     2026.08.19 was only seen printing it on failure. If it does not, 20.5's
     translation log line is dropped and the plan line is kept.
-- [ ] 20.1 Pure functions, test-first: `parseCaptionTracks`,
-  `hasUploadedTrack` (prefix), `hasASRTrack` (exact), `fetchPlan`. The
+- [ ] 20.1 Pure functions, test-first: `hasUploadedTrack` (prefix),
+  `hasASRTrack` (exact), `fetchPlan` (over `captionInfo`; parsing is task 21's
+  `parseCaptions`, already tested). The
   `fetchPlan` table includes: cold memo → `[L]`; known, zero tracks → `[L]`;
   only `asr` `en-US` (the `r8CppXSqVDU` shape) → `[L]`; uploaded exact `en` →
   `[L]`; uploaded only under a variant code (the `UF8uR6Z6KLc` shape) → `[L]`;
   `asr` exact `en`, no uploaded → `[L-orig, L]`; `asr` exact `en` **and**
   uploaded → `[L]`; `L` ending in `-orig` → `[L]`.
-- [ ] 20.2 Track memo, additive: a per-video memo beside the language memo
+- [ ] 20.2 `captionInfo` memo, additive: a per-video memo beside the language memo
   (same cap/clear-when-full shape; the language memo, `lookupSpokenLanguage`
   and `resolveDefaultLanguage([]byte)` keep their signatures, so every
   existing `language_test.go` case passes **without edits**); the default
-  `lookupSpokenLanguage` is rebuilt on the track memo. Tests: (a) stub
-  `lookupCaptionTracks`, call `ResolveLanguage` and then the funnel's plan
+  `lookupSpokenLanguage` is rebuilt on the `captionInfo` memo
+  (`resolveFromCaptions(info)`). Tests: (a) stub
+  `lookupCaptionInfo`, call `ResolveLanguage` and then the funnel's plan
   step, assert **exactly one** lookup (this is what "one page fetch" means, and
   a stub of `lookupSpokenLanguage` alone cannot prove it); (b) on a cold memo
   the funnel makes **zero** lookups; (c) a lookup error is not memoized and
@@ -165,6 +170,9 @@ Explicitly **not** doing:
   `withStubbedLookup` does in `language_test.go`).
 - [ ] 20.7 **Live smoke** (CLI built from the branch; record the yt-dlp version
   actually used; paced ≥ 15 s between videos):
+  - one Vietnamese and one German video from task 21's smoke (e.g.
+    `r8CppXSqVDU`, `cZSgL76ddDs`), language omitted → transcript in the same
+    language as before this task, plan/log per the 20.0b outcome;
   - `vyIgAO8aCbA`, `BqRhBq-_kgE`, language omitted → genuine `en-orig` text,
     log shows `plan=en-orig,en` succeeding and **no** `lang=en` 429 line;
   - `X0UI0O8YzJM`, `dQw4w9WgXcQ` (uploaded) → plan `[en]`, no `-orig`
@@ -209,28 +217,21 @@ omitted-language caller already calls `ResolveLanguage`, then funnels into
 `fetchTranscript`).
 
 ```go
-// language.go
-type captionTrack struct {
-    Language string // languageCode, e.g. "en", "pt-BR"
-    Kind     string // "asr" = auto-generated; "" = uploaded
-}
-
-func parseCaptionTracks(playerResponse []byte) []captionTrack     // pure; reuses captionTracksResponse
-func languageFromTracks(tracks []captionTrack) string              // today's resolution rules, moved out unchanged
-func resolveDefaultLanguage(playerResponse []byte) string          // SIGNATURE KEPT = languageFromTracks(parseCaptionTracks(pr))
+// language.go — captionTrack, captionInfo, parseCaptions, originalAudioLanguage,
+// findTrack, resolveFromCaptions and resolveDefaultLanguage already exist (task 21).
 func hasUploadedTrack(tracks []captionTrack, lang string) bool     // pure; prefix: lang or lang-*
 func hasASRTrack(tracks []captionTrack, lang string) bool          // pure; exact languageCode
 
-// ADDITIVE: a second small memo (video -> []captionTrack) and its own stub seam.
-var lookupCaptionTracks = func(ctx context.Context, videoID string) ([]captionTrack, error)
-var defaultTrackMemo = newTrackMemo(256)
-func captionTracksFor(ctx context.Context, videoID string) ([]captionTrack, bool) // fetches on miss; !ok on error, not memoized
-func peekCaptionTracks(videoID string) ([]captionTrack, bool)                      // memo read only, NEVER the network
-// lookupSpokenLanguage's DEFAULT body becomes: tracks := captionTracksFor(...); return languageFromTracks(tracks)
+// ADDITIVE: a second small memo (video -> captionInfo) and its own stub seam.
+var lookupCaptionInfo = func(ctx context.Context, videoID string) (captionInfo, error)
+var defaultInfoMemo = newInfoMemo(256)
+func captionInfoFor(ctx context.Context, videoID string) (captionInfo, bool) // fetches on miss; !ok on error, not memoized
+func peekCaptionInfo(videoID string) (captionInfo, bool)                      // memo read only, NEVER the network
+// lookupSpokenLanguage's DEFAULT body becomes: info, ok := captionInfoFor(...); return resolveFromCaptions(info)
 func ResolveLanguage(ctx, videoID, requested string) string       // contract unchanged
 
 // transcript.go
-func fetchPlan(tracks []captionTrack, warm bool, lang string) []string           // pure; the "Approach" step 2
+func fetchPlan(info captionInfo, warm bool, lang string) []string                // pure; the "Approach" step 2, reads info.Tracks
 func fetchWithPlan(plan []string, fetch func(lang string) (parsedTranscript, error)) (parsedTranscript, error)
 func formatPlanLog(lang string, plan []string, succeeded string, elapsed time.Duration, err error) string
 func formatTranslatedLog(lang, tlang string) string
@@ -239,11 +240,11 @@ func formatTranslatedLog(lang, tlang string) string
 Call graph (language omitted, cache miss):
 
 ```
-handler/CLI ─▶ ResolveLanguage ─▶ language memo ─▶ lookupSpokenLanguage ─▶ captionTracksFor ─▶ [watch page GET, once]
-     │                                                                          │ warms track memo
+handler/CLI ─▶ ResolveLanguage ─▶ language memo ─▶ lookupSpokenLanguage ─▶ captionInfoFor ─▶ [watch page GET, once]
+     │                                                                          │ warms captionInfo memo
      └─▶ fetchTranscript(videoID, L) ─▶ defaultCache.getOrFetch({videoID, L})
                                           └▶ fetchSegmentsFromYtDlp
-                                               ├▶ peekCaptionTracks   (memo read; cold ⇒ plan [L])
+                                               ├▶ peekCaptionInfo   (memo read; cold ⇒ plan [L])
                                                ├▶ fetchPlan ─▶ [L] | [L-orig, L]
                                                └▶ fetchWithPlan ─▶ fetchSegmentsOnce(L') per attempt
                                                      └▶ per-attempt failure lines + plan line (+ translated line)
@@ -270,6 +271,10 @@ their tests are ported, not deleted.
   the ground can move again. The plan degrades to today's behaviour when its
   assumption fails, and the retry stays as the safety net.
 - **`en-orig` genuineness on non-English speech is unmeasured** (20.0b).
+- **`L` is now a track's own code.** After task 21, `L` may be `vi`, `de` or
+  `de-DE`. `hasASRTrack` is an exact match on `L`, so `[L-orig, L]` is planned
+  only when the page lists an auto track with exactly that code; 20.1 should pin a
+  `de` / `de-orig` case and a `de-DE`-with-only-auto-`de` case (→ `[L]`).
 - **Two memos for one page.** Chosen over replacing the language memo because
   that would edit ~24 references in `language_test.go` and change the task
   18/19 seam for no user-visible gain; the cost is ~25 duplicated lines of memo
@@ -309,4 +314,9 @@ their tests are ported, not deleted.
   narrowed to when it occurs, to keep `errors.log` an error log. Advise's side
   observation that `resolveDefaultLanguage` returns `en` whenever any `en-*`
   track exists was **confirmed live** and is now BUG-013.
+- 2026-09-27: **rev 3** after task 21 merged (PR #38): memo type and function
+  names moved to `captionInfo`; 20.0b promoted to a gate for non-English `L`; no
+  change to the approach or scope. Not re-Advised (mechanical revision, no new
+  judgement call). **Human re-approval of rev 3: pending** — status stays
+  DRAFT, not approved.
 - Human review: **pending.**
