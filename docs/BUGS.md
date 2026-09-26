@@ -1071,7 +1071,7 @@ Next step: **task 20** (`docs/tasks/20-guarded-orig-first/TASK.md`, DRAFT, not a
 
 ## BUG-013: `resolveDefaultLanguage` returns `en` for a non-English video that now lists an `en-*` auto-caption track — task 18's BUG-011 fix no longer works on `r8CppXSqVDU`
 
-- **Status:** fix implemented on branch `fix/bug-013-original-language` (task 21, 2026-09-27; live-smoked on 13 videos, `docs/evidence/bug-013/smoke-task21-results.txt`) — **not merged yet**; `fixed` once merged
+- **Status:** fixed (task 21, PR #38 merged 2026-09-27; live-smoked on 13 videos, `docs/evidence/bug-013/smoke-task21-results.txt`)
 - **Discovered:** 2026-09-27, while reviewing the task 20 draft (an Advise call pointed at the rule; the live check confirmed it).
 - **Reachability: yes** — real call path: `get_transcript` / `get_transcript_timed` / `get_transcript_range` / `search_transcript` / `download_transcript*` / `get_video_brief` and the CLI `transcript` / `search` with `language` omitted → `ResolveLanguage` → `resolveDefaultLanguage` (`internal/core/language.go`). Reproduced through the CLI built from `main` (which includes tasks 18 and 19).
 

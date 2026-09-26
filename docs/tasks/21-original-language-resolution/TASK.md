@@ -1,6 +1,6 @@
 # Task 21: Resolve the default language from the video's original language (BUG-013 fix)
 
-**Status:** IMPLEMENTED on branch `fix/bug-013-original-language` (2026-09-27), Grade passed, not pushed/merged. The human approved this
+**Status:** DONE — merged in PR #38 (2026-09-27), Grade passed. The human approved this
 Definition of Done + Test Plan as drafted (rev 2). Fixes `docs/BUGS.md` BUG-013 (option 1, decided by the human 2026-09-27).
 Rev 2 incorporates an Advise call (logged in `docs/eagd-log.md`). Written on the
 `docs/bug-012-measurement-evidence` branch beside the evidence it rests on
