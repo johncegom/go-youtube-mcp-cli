@@ -1,0 +1,19 @@
+== A. streamingData default audio track (audioIsDefault:true) per viewer locale
+video        Accept-Language  default audio id  #audioTracks hostLanguage
+r8CppXSqVDU  None             vi.4              2            ['vi']  (Vietnamese original)
+r8CppXSqVDU  en-US,en;q=0.9   None              2            ['en']  (Vietnamese original)
+r8CppXSqVDU  de-DE,de;q=0.9   vi.4              2            ['de']  (Vietnamese original)
+r8CppXSqVDU  ja-JP,ja;q=0.9   vi.4              2            ['ja']  (Vietnamese original)
+cZSgL76ddDs  None             de-DE.4           2            ['vi']  (German original)
+cZSgL76ddDs  en-US,en;q=0.9   None              2            ['en']  (German original)
+cZSgL76ddDs  de-DE,de;q=0.9   de-DE.4           2            ['de']  (German original)
+cZSgL76ddDs  ja-JP,ja;q=0.9   de-DE.4           2            ['ja']  (German original)
+vyIgAO8aCbA  None             en-US.4           21           ['vi']  (English original)
+vyIgAO8aCbA  en-US,en;q=0.9   en-US.4           21           ['en']  (English original)
+vyIgAO8aCbA  de-DE,de;q=0.9   None              21           ['de']  (English original)
+vyIgAO8aCbA  ja-JP,ja;q=0.9   None              21           ['ja']  (English original)
+
+== B. the '.4' id in captions.audioTracks per viewer locale
+r8CppXSqVDU  .4 ids per locale = [['vi.4'], ['vi.4'], ['vi.4'], ['vi.4']]  ids-count = [2, 2, 2, 2]  identical across locales: True
+cZSgL76ddDs  .4 ids per locale = [['de-DE.4'], ['de-DE.4'], ['de-DE.4'], ['de-DE.4']]  ids-count = [2, 2, 2, 2]  identical across locales: True
+vyIgAO8aCbA  .4 ids per locale = [['en-US.4'], ['en-US.4'], ['en-US.4'], ['en-US.4']]  ids-count = [21, 21, 21, 21]  identical across locales: True

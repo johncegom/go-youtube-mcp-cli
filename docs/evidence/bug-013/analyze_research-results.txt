@@ -1,0 +1,63 @@
+videos: 41   page errors: []   yt-dlp errors: []
+
+id           intended .4 audio lang yt-dlp  today rule #trk verdict
+5oer61Xyi4c  en       en-US         en-US   en           21 .4==yt-dlp
+X0UI0O8YzJM  en       None          en      en            2 
+kjoQPn--F7A  en       None          en      en            2 
+r8CppXSqVDU  vi       vi            vi      en            2 .4==yt-dlp; RULE WRONG (en vs vi)
+BqRhBq-_kgE  en       en-US         en-US   en           21 .4==yt-dlp
+I8XaYkRW1tA  ?        None          None    en           11 
+vyIgAO8aCbA  en       en-US         en-US   en           21 .4==yt-dlp
+qN6OM1IzjIE  en       en-US         en-US   en           18 .4==yt-dlp
+vsGwx28z4jk  en       en-US         en-US   en           21 .4==yt-dlp
+LXb3EKWsInQ  ?        None          None    en            0 
+QcdpeFbuy8o  en       en-US         en-US   en           21 .4==yt-dlp
+KcVkq5L-0f0  en       en-US         en-US   en           21 .4==yt-dlp
+dQw4w9WgXcQ  en       None          en      en            6 
+9EUTRL_4Cj8  vi       None          vi      vi            1 
+qp0HIF3SfI4  en       None          None    en           49 
+iG9CE55wbtY  en       None          en      en           65 
+UF8uR6Z6KLc  en       None          en      en            9 
+B9MBdB1Ih6Q  vi       vi            vi      en            2 .4==yt-dlp; RULE WRONG (en vs vi)
+Za_PoC0D3CQ  vi       vi            vi      en            2 .4==yt-dlp; RULE WRONG (en vs vi)
+fdkYE4uxL0A  vi       vi            vi      en            2 .4==yt-dlp; RULE WRONG (en vs vi)
+jrx_oJyoWeo  vi       None          vi      vi            1 
+-gbyY_L4WGw  es       None          None    en            0 
+WOWmB3CKcgg  es       None          es      es            1 
+GWxnjbsK1ik  es       None          es      es            1 
+oPy8a-TCjzA  es       None          None    en            0 
+z0hwcaKiHvQ  ja       None          ja      ja            1 
+2NizEavUadg  ja       None          ja      ja            1 
+3OTk5uiyUvQ  ja       None          ja      ja            1 
+A8upXHkwaCM  ja       None          ja      ja            1 
+ttsQoGSGnZ8  uk       None          uk      uk            1 
+Cpx3JsZO2qU  uk       None          uk      uk            1 
+KdqsaVy99q0  uk       None          None    en            0 
+VibPh1XzRaQ  uk       None          uk      uk            1 
+bIr9H_CJJEk  hi       None          hi      hi            1 
+EuZazXwSnjA  hi       None          None    en            0 
+CpnIDHPcDSc  hi       None          hi      hi            1 
+PxZ9jPV8Qj0  hi       None          None    en            0 
+cZSgL76ddDs  de       de-DE         de-DE   en            2 .4==yt-dlp; RULE WRONG (en vs de-DE)
+0n5AYXkXP3Y  de       de-DE         de-DE   en            3 .4==yt-dlp; RULE WRONG (en vs de-DE)
+iLnTZhrkUpA  de       de-DE         de-DE   en            3 .4==yt-dlp; RULE WRONG (en vs de-DE)
+cfOe1Po8C8A  de       None          de      de            1 
+
+with an audioTracks structure: 14; exactly one '.4' id and equal to yt-dlp's language: 14/14
+with a yt-dlp language: 33; today's rule right on 26, WRONG on 7: ['r8CppXSqVDU', 'B9MBdB1Ih6Q', 'Za_PoC0D3CQ', 'fdkYE4uxL0A', 'cZSgL76ddDs', '0n5AYXkXP3Y', 'iLnTZhrkUpA']
+
+audio language (.4) vs the auto-caption track codes that would have to be requested:
+  5oer61Xyi4c  audio=en-US  exact-code-in-asr=False base-language-match=['en']
+  r8CppXSqVDU  audio=vi     exact-code-in-asr=True  base-language-match=['vi']
+  BqRhBq-_kgE  audio=en-US  exact-code-in-asr=False base-language-match=['en']
+  vyIgAO8aCbA  audio=en-US  exact-code-in-asr=False base-language-match=['en']
+  qN6OM1IzjIE  audio=en-US  exact-code-in-asr=False base-language-match=['en']
+  vsGwx28z4jk  audio=en-US  exact-code-in-asr=False base-language-match=['en']
+  QcdpeFbuy8o  audio=en-US  exact-code-in-asr=False base-language-match=['en']
+  KcVkq5L-0f0  audio=en-US  exact-code-in-asr=False base-language-match=['en']
+  B9MBdB1Ih6Q  audio=vi     exact-code-in-asr=True  base-language-match=['vi']
+  Za_PoC0D3CQ  audio=vi     exact-code-in-asr=True  base-language-match=['vi']
+  fdkYE4uxL0A  audio=vi     exact-code-in-asr=True  base-language-match=['vi']
+  cZSgL76ddDs  audio=de-DE  exact-code-in-asr=False base-language-match=['de']
+  0n5AYXkXP3Y  audio=de-DE  exact-code-in-asr=False base-language-match=['de']
+  iLnTZhrkUpA  audio=de-DE  exact-code-in-asr=False base-language-match=['de']

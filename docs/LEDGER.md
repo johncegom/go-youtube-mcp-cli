@@ -236,6 +236,8 @@ promoted to a task gets a row in the table above and a `TASK.md`.
    BUG-012 (plain `en` 429s; retry with `<lang>-orig`) is fixed by PR #36 but stays
    open for one limitation (silent back-translation); its evidence is in
    `docs/evidence/bug-012/`. **BUG-013 is open and awaiting a human decision**
-   (`ResolveLanguage` returns `en` for `r8CppXSqVDU` again — task 18's fix
-   regressed on a real video). Task 20 is a DRAFT that should follow it.
+   (`ResolveLanguage` returns `en` for every non-English video with YouTube's
+   auto-dubbing structure — 7 of 7 sampled — so task 18's fix regressed on real
+   videos). Its research is done (`docs/evidence/bug-013/`; recommended signal:
+   the `.4` id in `captions.audioTracks`). Task 20 is a DRAFT that should follow it.
 5. After finishing a task: update **that task's `TASK.md`** with full detail first, then update this index's status column/checkbox for it, then pause and ask the human before starting the next task. If the task involved a deliberate design/scope tradeoff, log it in `docs/DECISIONS.md` too; if it surfaced a way-of-working lesson that generalizes beyond that one task, log it in `docs/RETRO.md`.
