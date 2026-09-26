@@ -1,0 +1,8 @@
+r8CppXSqVDU L=vi: plain=ok/48245ch orig=ok/48245ch identical=True sim=1.0
+B9MBdB1Ih6Q L=vi: plain=ok/36023ch orig=ok/36023ch identical=True sim=1.0
+Za_PoC0D3CQ L=vi: plain=ok/45615ch orig=ok/45615ch identical=True sim=1.0
+fdkYE4uxL0A L=vi: plain=ok/72581ch orig=ok/72587ch identical=False sim=0.87
+cZSgL76ddDs L=de: plain=ok/23849ch orig=ok/23849ch identical=True sim=1.0
+0n5AYXkXP3Y L=de: plain=ok/9077ch orig=ok/22841ch identical=False sim=0.511
+iLnTZhrkUpA L=de: plain=ok/12830ch orig=ok/32140ch identical=False sim=0.511
+DONE

@@ -1,7 +1,7 @@
 # Task 20: Guarded orig-first transcript fetch (BUG-012 follow-up)
 
 **Status:** APPROVED rev 3, not started (2026-09-27) — the human approved this Definition of Done + Test Plan
-(rev 3: rev 2 + Program design revised after task 21); **nothing here is implemented.** Next step: 20.0b (blocks coding the plan for non-English `L`). Rev 2 incorporates an
+(rev 3: rev 2 + Program design revised after task 21); **nothing here is implemented.** Next step: the human decides the 20.0b outcome (restrict the plan to base-`en` `L`, or keep it general); then 20.1. Rev 2 incorporates an
 Advise call (logged in `docs/eagd-log.md`) and four checks run against its
 claims (see "Review log"). Written on the `docs/bug-012-measurement-evidence`
 branch next to the evidence it rests on.
@@ -109,7 +109,7 @@ Explicitly **not** doing:
     `pagecodes.py` / `pagecodes-results.txt`, 0 mismatches / 17. (Replaces the
     earlier "exact vs prefix" gate: the artifacts already settle it, see
     Approach.)
-  - [ ] 20.0b **(blocks coding the plan for non-English `L`)** *Is `<L>-orig`
+  - [x] 20.0b **(blocks coding the plan for non-English `L`)** — **done 2026-09-27, result below; a plan change is pending the human's decision.** *Is `<L>-orig`
     genuine for non-English speech?* Task 21 made the default `L` a track's own
     code (`vi`, `de`); task 21's live check saw `de-orig` return the identical
     file as `de` on `cZSgL76ddDs`, and plain `vi`/`de` fetch real transcripts,
@@ -119,6 +119,23 @@ Explicitly **not** doing:
     differ from plain `<L>`? If it adds nothing, restrict the plan to
     `L` whose base is `en`. (The BUG-013 half of the old question is closed by
     task 21.)
+    **Result** (`docs/evidence/bug-012/orig_nonenglish.py`, `orig_nonenglish-results.txt`;
+    yt-dlp 2026.07.04, 7 videos, one pass, alternating order, 15 s pace): **`<L>-orig`
+    exists on all 7 and never 429ed, and plain `<L>` never 429ed either** (`vi` x4, `de` x3).
+    - Auto-only videos (5): `-orig` text **identical** to plain on 4 (`r8CppXSqVDU`,
+      `B9MBdB1Ih6Q`, `Za_PoC0D3CQ`, `cZSgL76ddDs`); `fdkYE4uxL0A` 0.87 similar
+      (72581 vs 72587 chars, unexplained, one run).
+    - `0n5AYXkXP3Y`, `iLnTZhrkUpA` (uploaded `de` exists): plain `de` is the **uploaded**
+      track (9077 / 12830 chars), `de-orig` the auto one (22841 / 32140 chars, 0.51
+      similar) — the guard case: orig-first unguarded would replace the uploaded text,
+      and `hasUploadedTrack` correctly yields `[L]` there.
+    **Reading:** for non-English `L` the plan `[L-orig, L]` buys nothing measurable — plain
+    `L` already returns the original-language track and does not 429 — so it would be
+    an extra attempt-order rule on a path with no observed failure. Per this item's own
+    rule, "if it adds nothing, restrict the plan to `L` whose base is `en`". **This changes
+    the plan (`fetchPlan` returns `[L]` unless base(L) is `en`) so it goes to the human
+    before 20.1 is written**; caveats: n = 7, only vi/de, one day, no non-English
+    video that 429s on plain `L` was seen.
   - [ ] 20.0c *A sample not drawn from `errors.log`* (≥ 10 videos, mixed
     languages, with and without uploaded subtitles) with the saved scripts.
   - [ ] 20.0d *Is the timedtext URL printed on a **successful** fetch by the
