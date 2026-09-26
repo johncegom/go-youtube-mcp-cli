@@ -1023,7 +1023,7 @@ Advise (2026-09-26, `docs/eagd-log.md`) evaluated these; recommendation is optio
    Cost: an extra ~6 s yt-dlp call only where the first would fail; one doomed request plus one retry per video per cache lifetime.
 2. **`-orig` first, plain code as fallback.** One call when it works, but changes the working path for every video and regresses videos with uploaded English subs (no `-orig` entry exists for them). Rejected by Advise.
 3. **`--sub-langs "<lang>-orig,<lang>"` in one call.** A single failed subtitle download makes yt-dlp exit non-zero, so the plain code's 429 would still fail the whole run. Rejected.
-4. **Decide up front from `captionTracks`.** Would copy yt-dlp's track-selection logic and never runs for an explicit `en`. Rejected.
+4. **Decide up front from `captionTracks`.** Would copy yt-dlp's track-selection logic and never runs for an explicit `en`. Rejected. *Superseded 2026-09-27 by task 20 (draft):* the later evidence showed the two page signals it needs (an uploaded track exists; an `asr` track with the exact code exists) agree with yt-dlp on 17/17, so no yt-dlp logic is copied, and the "never runs for an explicit `en`" objection is accepted — explicit-language callers keep today's path because task 20 uses the track list only when it is already in memory.
 5. **Message-only:** stop telling the user to change language when the resolved language is already the spoken one. Does not fix the failure; could accompany option 1.
 6. **Do nothing / wait:** if a per-IP throttle explains it, it may clear. Not testable retroactively.
 
@@ -1064,4 +1064,61 @@ Raw data, scripts, per-video table, environment and every caveat are in [`docs/e
 - The watch page's `captionTracks` (already scraped by the app) marked "uploaded English track exists" identically to yt-dlp's own list on 17/17, so a guard needs no extra yt-dlp run. The rule "uploaded → plain `en`; else `en-orig` if listed; else plain `en`" picked a request that returned a transcript on 14/17, and the other 3 (no English original / no captions) fall back to today's behaviour.
 - **Not measured:** how often the silent back-translation happens (n = 2 runs on one video; 0 of 9 `tlang` URLs succeeded in the sample), any yt-dlp version other than 2026.07.04, non-`en` languages, and whether `en-orig` is genuine on a *non-English-speech* video with the many-track structure.
 
-Proposed next step (not yet a task): a guarded orig-first fetch driven by `captionTracks`, keeping the shipped retry as the safety net.
+Correction (2026-09-27): plain `en` succeeded on all 7 sampled videos with an uploaded English track, but returned the *uploaded* track on only 4 confirmed (2 not scored); on `UF8uR6Z6KLc`, whose only uploaded key is the variant-coded `en-eEY6OEpapPo`, it returned the auto track. See the evidence README.
+
+Next step: **task 20** (`docs/tasks/20-guarded-orig-first/TASK.md`, DRAFT, not approved) — a guarded, peek-only orig-first plan driven by the already-scraped `captionTracks`, keeping the shipped retry as the safety net. **Decide BUG-013 first** (below): task 20 assumes the resolved language is right.
+
+
+## BUG-013: `resolveDefaultLanguage` returns `en` for a non-English video that now lists an `en-*` auto-caption track — task 18's BUG-011 fix no longer works on `r8CppXSqVDU`
+
+- **Status:** open
+- **Discovered:** 2026-09-27, while reviewing the task 20 draft (an Advise call pointed at the rule; the live check confirmed it).
+- **Reachability: yes** — real call path: `get_transcript` / `get_transcript_timed` / `get_transcript_range` / `search_transcript` / `download_transcript*` / `get_video_brief` and the CLI `transcript` / `search` with `language` omitted → `ResolveLanguage` → `resolveDefaultLanguage` (`internal/core/language.go`). Reproduced through the CLI built from `main` (which includes tasks 18 and 19).
+
+### Symptom
+
+`youtube-cli transcript r8CppXSqVDU` (Vietnamese speech, auto-captions only), no `--language`, fails with the BUG-011 message (HTTP 429, "set the language option to its spoken language"). `errors.log`:
+
+```
+transcript_fetch r8CppXSqVDU: lang=en duration=5.918s category=rate_limited err=…
+transcript_fetch r8CppXSqVDU: lang=en-orig duration=3.485s category=missing_captions …
+transcript_fetch_orig_retry r8CppXSqVDU: lang=en retry=en-orig outcome=failed category=missing_captions …
+```
+
+i.e. the language resolved to `en`, not `vi`. `--language vi` still returns the full Vietnamese transcript (same day), so the workaround holds. Task 19's checked DoD item 19.6 recorded this same video resolving to `vi` in a live smoke on 2026-09-20; the video presumably did not change and the page did (not verified — no page snapshot from that day).
+
+### Root cause
+
+Known at the code level, cause of the page change unknown. `resolveDefaultLanguage` (`language.go:46-50`) returns `"en"` as soon as **any** caption track — uploaded or auto-generated — has `languageCode` `en` or `en-*`, on the reasoning that a video with English captions should keep today's `en` behaviour. The watch page of `r8CppXSqVDU` now lists `[("en-US","asr"), ("vi","asr")]` (`docs/evidence/bug-012/pagecodes-results.txt`): an auto-generated `en-US` track on a video whose speech is Vietnamese (yt-dlp likewise lists `en-US-orig` and `vi-orig`), so rule 1 fires and the spoken language is never consulted. Rule 2 (the first `asr` track's language) is only reached when no English track exists.
+
+Related, **not verified** because no such video was found: the ~20-track structure seen on 2026-09-26 (7 of 17 sampled videos, all English speech) lists an `asr` `en` track on *every* video, so on a non-English-speech video with that structure rule 1 would always return `en`.
+
+### Evidence
+
+| Video | yt-dlp `language` | page `asr` tracks | resolves to (today) | correct? |
+|---|---|---|---|---|
+| `r8CppXSqVDU` | `vi` | `en-US`, `vi` | `en` → 429 | no — **verified live** (above) |
+| `9EUTRL_4Cj8` | `vi` | one track, not English | its language | not run |
+| 7 videos with the ~20-track structure | `en-US` | 18–21 incl. `en` | `en` | yes (English speech) |
+| 5 videos with `language` `en` (uploaded subs and at most one `asr` `en` track) | `en` | `en` | `en` | yes |
+| 3 videos with no auto-caption tracks (`I8XaYkRW1tA`, `LXb3EKWsInQ`, `qp0HIF3SfI4`) | none | none | `en` | not applicable |
+
+The same table shows a candidate signal: yt-dlp's `language` field was `vi` for both Vietnamese-reporting videos and `en` / `en-US` for every English one that has the field (`None` for 3 videos without auto tracks). Where yt-dlp gets it, and whether the watch page carries an equivalent that the app already fetches, is **unverified**.
+
+### Options
+
+1. **Ask what language the video declares, not whether English captions exist.** Read the equivalent of yt-dlp's `language` from the watch page (candidates: the default audio track's language in `streamingData`/`audioTracks`, `videoDetails`/`microformat` fields — none checked) and use it for the default; keep rule 1's "uploaded English track ⇒ `en`" only for *uploaded* tracks. Needs a research step to find where the value lives and to check it on non-English videos before any code.
+2. **Narrow rule 1 to uploaded English tracks only**, and treat a lone `en`/`en-*` `asr` track next to a non-English `asr` track as ambiguous → prefer the non-English one. Cheap and local, but a heuristic: on the ~20-track structure the `asr` `en` is present for English *and* (presumably) non-English videos alike, so it cannot tell them apart.
+3. **Use a yt-dlp `-J` run for `language`.** Reliable on this sample but an extra ~5 s yt-dlp extraction per uncached video; only if the page has no equivalent.
+4. **Leave it; document `--language`.** The BUG-011 message already says to set the language, but for this video it is now the *default path* that fails, which is what task 18 existed to prevent.
+5. **Do nothing here and rely on BUG-012's retry.** Does not help: the `-orig` track does not exist for a non-English original.
+
+Recommendation: option 1 after a short research step (where does the page carry the declared language, and does it agree with yt-dlp's on ≥ 10 videos including several non-English ones), falling back to option 3 if it does not; not option 2 alone.
+
+### Interaction with task 20
+
+Task 20 (guarded orig-first, `docs/tasks/20-guarded-orig-first/TASK.md`, draft) assumes the language `L` it is handed is right. It does not fix this bug, and its plan (`L-orig` first) would only make the same wrong `L` fail faster. Deciding this bug first is cleaner.
+
+### Decision
+
+Pending — human decision required.
