@@ -346,6 +346,23 @@ func formatTranscriptFailureLog(language string, elapsed time.Duration, category
 	return fmt.Sprintf("lang=%s duration=%s category=%s err=%s", language, elapsed.Round(time.Millisecond), category, err.Error())
 }
 
+// fetchPlan returns the languages to try, in order, for requested language
+// lang (docs/tasks/20-guarded-orig-first). Plain "en" on an auto-caption-only
+// English video 429s or silently returns a back-translation while "en-orig"
+// is the genuine track, so when the page's captionInfo is known (warm) and
+// lists an auto track with exactly this code and no uploaded track, "-orig"
+// goes first. Otherwise [lang]: an uploaded track must not be replaced by the
+// auto one, and a cold memo means no page data. Restricted to English: for
+// other languages plain "<L>" never 429ed and equalled "<L>-orig" (task 20.0b,
+// docs/evidence/bug-012/orig_nonenglish-results.txt).
+func fetchPlan(info captionInfo, warm bool, lang string) []string {
+	if !warm || strings.HasSuffix(lang, "-orig") || baseLanguage(lang) != "en" ||
+		hasUploadedTrack(info.Tracks, lang) || !hasASRTrack(info.Tracks, lang) {
+		return []string{lang}
+	}
+	return []string{lang + "-orig", lang}
+}
+
 // origRetryLanguage returns the language to retry with after a failed fetch,
 // or "" for no retry (docs/BUGS.md BUG-012). A plain "<lang>" request can 429
 // — yt-dlp turns it into a translation of another track — while the genuine

@@ -1,7 +1,7 @@
 # Task 20: Guarded orig-first transcript fetch (BUG-012 follow-up)
 
 **Status:** APPROVED rev 3, not started (2026-09-27) — the human approved this Definition of Done + Test Plan
-(rev 3: rev 2 + Program design revised after task 21); **nothing here is implemented.** Next step: the human decides the 20.0b outcome (restrict the plan to base-`en` `L`, or keep it general); then 20.1. Rev 2 incorporates an
+(rev 3: rev 2 + Program design revised after task 21); **nothing here is implemented.** 20.1 done (`hasUploadedTrack`, `hasASRTrack` in `language.go`, `fetchPlan` in `transcript.go`; tests in `transcript_plan_test.go`, incl. real-page fixtures). 20.0b done; **the human decided (2026-09-27) to restrict the plan to English `L`** (see 20.0b and the Review log). Next: 20.2. Rev 2 incorporates an
 Advise call (logged in `docs/eagd-log.md`) and four checks run against its
 claims (see "Review log"). Written on the `docs/bug-012-measurement-evidence`
 branch next to the evidence it rests on.
@@ -68,9 +68,11 @@ Decide the attempt order **before** the first yt-dlp call, from the track list
    adds **no request and no latency**, and leaves DECISION-022's playlist scope
    cut intact.
 2. **Plan** for requested language `L` (pure):
-   - memo cold, `L` already ends in `-orig`, or an uploaded track exists for
+   - memo cold, `L` already ends in `-orig`, `L`'s base language is not `en`, or an
+     uploaded track exists for
      `L` (`L` or `L-*`, i.e. **prefix**, see below) → `[L]`;
-   - else an `asr` track with `languageCode == L` exists → `[L-orig, L]`;
+   - else, **only when `L`'s base language is `en`** (human decision after 20.0b), an
+     `asr` track with `languageCode == L` exists → `[L-orig, L]`;
    - else → `[L]`.
 3. **Run** the plan in order; the first success wins. If every attempt fails,
    return the error of the attempt for the **requested** language `L` (a
@@ -143,7 +145,8 @@ Explicitly **not** doing:
     `[debug] Invoking http downloader on "…timedtext…"`); the app's
     2026.08.19 was only seen printing it on failure. If it does not, 20.5's
     translation log line is dropped and the plan line is kept.
-- [ ] 20.1 Pure functions, test-first: `hasUploadedTrack` (prefix),
+- [x] 20.1 Pure functions, test-first (**plan restricted to base-`en` `L`**; add cases: real `vi`/`de`
+  auto-only tracks → `[L]`, `de` and `de-DE` with an exact/other auto track → `[L]`): `hasUploadedTrack` (prefix),
   `hasASRTrack` (exact), `fetchPlan` (over `captionInfo`; parsing is task 21's
   `parseCaptions`, already tested). The
   `fetchPlan` table includes: cold memo → `[L]`; known, zero tracks → `[L]`;
@@ -336,3 +339,4 @@ their tests are ported, not deleted.
   change to the approach or scope. Not re-Advised (mechanical revision, no new
   judgement call). Human re-approval of rev 3 was requested.
 - 2026-09-27: **Human review: rev 3 approved** ("approve task 20 rev 3"), after PR #39 merged. The approval covers the text as written; 20.0b remains a gate for the non-English part of the plan, and a result that changes the plan goes back to the human.
+- 2026-09-27: **Human decision on 20.0b:** restrict to en - fetchPlan returns [L] unless L base language is en; 20.1 started. (A restriction, not new scope; reversible if a non-English video ever 429s on plain L.)

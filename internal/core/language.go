@@ -323,3 +323,28 @@ func SaveTranscriptFileResolved(ctx context.Context, videoID, requested, outputD
 	}
 	return path, LanguageNote(requested, language), nil
 }
+
+// hasUploadedTrack reports whether an uploaded (non-auto) track exists for
+// lang, matching lang itself or any "lang-*" code. Prefix, not exact, on
+// purpose: a variant-coded uploaded track ("en-eEY6OEpapPo") is not fetched by
+// yt-dlp's plain "en", but treating it as present errs toward today's plain
+// fetch, the safe side (docs/tasks/20-guarded-orig-first).
+func hasUploadedTrack(tracks []captionTrack, lang string) bool {
+	for _, t := range tracks {
+		if t.Kind != "asr" && (t.Language == lang || strings.HasPrefix(t.Language, lang+"-")) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasASRTrack reports whether an auto-generated track with exactly this code
+// exists — the page-side signal that yt-dlp lists "<lang>-orig".
+func hasASRTrack(tracks []captionTrack, lang string) bool {
+	for _, t := range tracks {
+		if t.Kind == "asr" && t.Language == lang {
+			return true
+		}
+	}
+	return false
+}
