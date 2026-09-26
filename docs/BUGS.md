@@ -966,3 +966,90 @@ Fix now (human decision, 2026-09-20): **message-only fix + BUG-009 amendment**, 
 **Follow-up (2026-09-20): task 18** (`docs/tasks/18-native-language-fallback/TASK.md`, DECISION-022) resolves an omitted `language` from the video's caption tracks, so the default-`en` trigger no longer occurs for `get_transcript`, `get_transcript_timed`, `get_transcript_range`, `search_transcript` and the CLI `transcript`/`search`. It still applies to an explicit `en` on a non-English video, and to `download_transcript*`, `get_video_brief` and `search_playlist`, which keep the plain `en` default. Tracked as task 19 (`docs/tasks/19-language-resolution-remaining-tools/TASK.md`).
 
 **Follow-up (2026-09-20): task 19** (`docs/tasks/19-language-resolution-remaining-tools/TASK.md`, DECISION-022 update) extends the resolution to `download_transcript*`, the CLI `transcript --save` and `get_video_brief`. Remaining exposure to this bug: an *explicit* `en` on a non-English video, and `search_playlist`, which stays on the plain `en` default by decision (its skip line carries the language hint; a lazy retry is parked in the `docs/LEDGER.md` Backlog).
+
+## BUG-012: Plain `--sub-langs en` 429s on auto-caption videos while the genuine `en-orig` track downloads fine — the BUG-011 fix (resolve the language) cannot help, because the language is already right
+
+- **Status:** open
+- **Discovered:** 2026-09-26, user-reported `get_transcript` failure on `vyIgAO8aCbA` (English speech, auto-dubbed into many languages), with the BUG-011 message.
+- **Reachability: yes** — real call path (`get_transcript` with no `language` → `ResolveLanguage` → `"en"` → `fetchSegmentsFromYtDlp`, `internal/core/transcript.go`), reproduced through the real MCP server, and with plain `yt-dlp` and no app code.
+- **Relation to BUG-011:** different mechanism. BUG-011 was a *wrong requested language* on a non-English video, fixed by resolving the language (tasks 18/19). Here the requested language is correct; yt-dlp's own handling of plain `en` selects a throttled request.
+
+### Symptom
+
+```
+YouTube rejected the caption download for video vyIgAO8aCbA (HTTP 429). If the video isn't spoken in English, retry with the language option set to its spoken language (CLI: --language): the default "en" asks for a machine-translated track, which YouTube rejects. Otherwise this may be a temporary throttle; wait before retrying or use a different network.
+```
+
+The first half of that message is actively wrong here: the spoken language *is* English, and following it (`language=uk`) returns a Ukrainian machine translation of English speech.
+
+### Evidence (2026-09-26, same machine/network, yt-dlp 2026.07.04 unless noted)
+
+| Video | Request | Result |
+|---|---|---|
+| `vyIgAO8aCbA` | MCP `get_transcript`, no language | **429** |
+| `vyIgAO8aCbA` | `--sub-langs en` | **429**, 4 of 4 attempts (3 of them ~2.5 min apart) |
+| `vyIgAO8aCbA` | `--sub-langs en-orig` | OK — 88 KB, `Language: en`, real English |
+| `vyIgAO8aCbA` | `--sub-langs uk` | OK, but a Ukrainian *translation* of English speech |
+| `BqRhBq-_kgE` (English, auto-captions only) | `--sub-langs en` | **429** (2 of 2) — BUG-011 recorded this as OK on 2026-09-20 |
+| `BqRhBq-_kgE` | `--sub-langs en-orig` | OK — 54 KB |
+| `dQw4w9WgXcQ` (uploaded English subs) | `--sub-langs en` with and without `--write-auto-subs` | OK |
+| `r8CppXSqVDU` (Vietnamese) | `--sub-langs en-orig` | exit 0, **no file**, `There are no subtitles for the requested languages` |
+
+- App log for the failing fetch: the timedtext URL was `lang=uk&tlang=en`, i.e. a translation of the Ukrainian track into English.
+- `--list-subs` on `vyIgAO8aCbA` lists `en-orig`, `ru-orig` and `uk-orig` (three "originals", consistent with the video's dubbed audio tracks); on `dQw4w9WgXcQ`, `BqRhBq-_kgE`, `5oer61Xyi4c` it lists `en-orig` on all three.
+- The watch page's `captionTracks` for `vyIgAO8aCbA` has ~20 `kind:"asr"` tracks; `a.en` carries `variant=gemini&exp=xpe`, the rest `timing-optimized`. `resolveDefaultLanguage` correctly returns `"en"` for it, so the language-resolution code is not at fault.
+
+### Root cause
+
+Partly known. For `vyIgAO8aCbA`, yt-dlp turns a request for `en` into a translation of another language's track (`lang=uk&tlang=en`), and YouTube rejects that request with 429; the genuine track is only reachable as `en-orig`. **Unknown:** why yt-dlp does so (the multiple dubbed audio tracks / multiple `-orig` entries are the leading suspect, unproven); and why plain `en` also 429s on the single-language `BqRhBq-_kgE`, which worked on 2026-09-20 — a YouTube-side change, a per-IP throttle, or a yt-dlp version difference are all unexcluded.
+
+### Not verified / caveats
+
+- **Own request volume.** ~15 `en` requests were made from one IP during this investigation; a temporary per-IP throttle on plain `en` may explain part of the `BqRhBq-_kgE` result. `en-orig` succeeding from the same IP in the same period argues against a blanket throttle but does not exclude a track-specific one.
+- **yt-dlp version.** The app's log shows 2026.08.19; that binary is no longer on disk. The app installs with `AllowVersionMismatch: true` (`internal/core/ytdlp.go:71`), so it runs whichever yt-dlp is resolved first, not the pinned one. Reproductions here used 2026.07.04. Which version the running server uses is unconfirmed.
+- **`en` vs `en-orig` text.** Not diffed: `en` never succeeded on a video where `en-orig` exists. Whether `-orig` returns the same text as a working `en` is untested.
+- **Manual subs + `-orig`.** `--sub-langs en-orig` matches only the auto-caption entry, so it would never fetch an uploaded English track.
+
+### Options
+
+Advise (2026-09-26, `docs/eagd-log.md`) evaluated these; recommendation is option 1.
+
+1. **Retry once with `<lang>-orig` after a `rate_limited` failure** (Advise's recommendation, with conditions):
+   - trigger from the existing `classifyTranscriptError` category, not a second `"429"` check; skip if the language already ends in `-orig`;
+   - retry inside `fetchSegmentsFromYtDlp`, so a success is cached under the caller's language (`fetchTranscript` builds the key from it, `transcript.go:304`);
+   - if the retry fails or finds no file, return the **original** 429 error — otherwise an explicit `en` on a non-English video would swap BUG-011's useful hint for a misleading "no captions";
+   - `pickVttFile` needs no logic change (with only `sub.en-orig.vtt` present, its "first `.vtt`" fallback picks it, `transcript.go:290`); pin that with one test rather than adding an `-orig` branch;
+   - factor the retry decision into a small pure function (category + language → retry language or none) so it is unit-testable.
+   Cost: an extra ~6 s yt-dlp call only where the first would fail; one doomed request plus one retry per video per cache lifetime.
+2. **`-orig` first, plain code as fallback.** One call when it works, but changes the working path for every video and regresses videos with uploaded English subs (no `-orig` entry exists for them). Rejected by Advise.
+3. **`--sub-langs "<lang>-orig,<lang>"` in one call.** A single failed subtitle download makes yt-dlp exit non-zero, so the plain code's 429 would still fail the whole run. Rejected.
+4. **Decide up front from `captionTracks`.** Would copy yt-dlp's track-selection logic and never runs for an explicit `en`. Rejected.
+5. **Message-only:** stop telling the user to change language when the resolved language is already the spoken one. Does not fix the failure; could accompany option 1.
+6. **Do nothing / wait:** if a per-IP throttle explains it, it may clear. Not testable retroactively.
+
+### Proposed Definition of Done / Test Plan (if option 1 is chosen)
+
+- Retry fires only on `rate_limited` and only when the language does not end in `-orig`; unit test on the pure decision function.
+- A failed or empty retry returns the original error unchanged; unit test on the composition with an injected fetcher.
+- `pickVttFile([]string{"sub.en-orig.vtt"}, "en")` returns that file; pinned by a test.
+- (added 2026-09-26, after the human asked whether the log was enough to debug this) The retry's outcome is logged as its own line, `transcript_fetch_orig_retry <id>: lang=<l> retry=<l>-orig outcome=recovered|failed[ category=<c>] duration=<d>`, so a recovered retry is distinguishable from an unrecovered failure and a failed retry is linked to its first attempt; format pinned by a unit test.
+- Live smoke, with the yt-dlp version recorded: `vyIgAO8aCbA` with no language now succeeds with real English; `r8CppXSqVDU` with explicit `en` still shows the BUG-011 message; `dQw4w9WgXcQ` unchanged; `BqRhBq-_kgE` recorded.
+- `go build`, `go vet`, `go test ./...`, `gofmt -l` clean.
+
+### Decision
+
+Fix now (human decision, 2026-09-26): **option 1**, on branch `fix/bug-012-orig-track-retry`. Implemented test-first in `internal/core/transcript.go`: pure `origRetryLanguage(category, language)`; `fetchWithOrigRetry(language, fetch)` (injected fetcher, returns the ORIGINAL error if the retry fails); the old `fetchSegmentsFromYtDlp` body is now `fetchSegmentsOnce` (each attempt still logs its own `lang=`), and `fetchSegmentsFromYtDlp` is the retrying wrapper, run inside `fetchTranscript`'s cache lookup. Tests: `TestOrigRetryLanguage`, `TestFetchWithOrigRetry`, two new `TestPickVttFile` cases. `go build`/`vet`/`test ./...`/`gofmt -l` clean.
+
+Live smoke (2026-09-26, CLI built from the branch; the app's own yt-dlp is 2026.08.19 per its log, the forced runs used 2026.07.04):
+- retry-success: `vyIgAO8aCbA`, no language, yt-dlp 2026.07.04 first on `PATH` — `errors.log` shows `lang=en … rate_limited`, output is the genuine `en-orig` text ("…a follow-up question on that then…");
+- double failure: `r8CppXSqVDU --language en` — `lang=en` 429, then `lang=en-orig` `missing_captions`; the user still gets the original BUG-011 message;
+- `dQw4w9WgXcQ` unchanged;
+- retry-outcome log line (added after Grade; `TestFormatOrigRetryLog`): live, `r8CppXSqVDU --language en` logged `transcript_fetch_orig_retry … outcome=failed category=missing_captions duration=3.329s` and `vyIgAO8aCbA` logged `… retry=en-orig outcome=recovered duration=6.05s`, each right after its first attempt's `rate_limited` line. Successful plain-code fetches are still not logged, so the silent back-translation case below stays invisible in the log.
+
+Graded by a fresh haiku call against the Definition of Done above: 6/6 pass. Two of its passes are weaker than they read: item 4's "`vyIgAO8aCbA` succeeds with real English" holds only for the run that hit the 429 (see below), and item 6 (a retry is cached under the caller's language) is a structural property of `fetchTranscript`'s key, with no test pinning it.
+
+### Known limitation (not fixed here — needs a decision)
+
+The retry only runs after a 429. On two other CLI runs of `vyIgAO8aCbA` plain `en` did **not** 429 (no failure logged) and returned a different, lower-quality text — a machine back-translation (uk → en): "a clarifying question… Jack Saling… 'mem' stocks", against the genuine track's "a follow-up question on that then… Jack saying…". So on this video a "successful" plain `en` can silently serve the back-translation, and this fix does not prevent that. The genuine track is only guaranteed by asking for `en-orig` first (option 2), which regresses videos with uploaded English subtitles unless guarded. Also unexplained: at the same minute, direct `yt-dlp 2026.07.04 --sub-langs en` 429'd on this video while the CLI's plain `en` did not (flag differences: the CLI adds `--ffmpeg-location`, `--verbose`), so the 429 is intermittent, contrary to the "4 of 4" above.
+
+Status stays `open` until the human decides whether to leave that limitation, or schedule an orig-first follow-up.

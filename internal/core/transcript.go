@@ -346,7 +346,68 @@ func formatTranscriptFailureLog(language string, elapsed time.Duration, category
 	return fmt.Sprintf("lang=%s duration=%s category=%s err=%s", language, elapsed.Round(time.Millisecond), category, err.Error())
 }
 
-func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (tr parsedTranscript, err error) {
+// origRetryLanguage returns the language to retry with after a failed fetch,
+// or "" for no retry (docs/BUGS.md BUG-012). A plain "<lang>" request can 429
+// — yt-dlp turns it into a translation of another track — while the genuine
+// "<lang>-orig" track downloads fine. Only a rate-limited failure is retried,
+// and never a language that is already "-orig".
+func origRetryLanguage(category, language string) string {
+	if category != "rate_limited" || strings.HasSuffix(language, "-orig") {
+		return ""
+	}
+	return language + "-orig"
+}
+
+// fetchWithOrigRetry calls fetch for language and, if that is rate limited,
+// once more for its "-orig" track. A failed retry returns the ORIGINAL error:
+// for an explicit "en" on a non-English video "en-orig" has no track, and its
+// "no captions" error must not replace the rate-limited diagnosis (BUG-011).
+func fetchWithOrigRetry(language string, fetch func(language string) (parsedTranscript, error)) (parsedTranscript, error) {
+	tr, err := fetch(language)
+	if err == nil {
+		return tr, nil
+	}
+	retry := origRetryLanguage(classifyTranscriptError(err), language)
+	if retry == "" {
+		return tr, err
+	}
+	if retried, retryErr := fetch(retry); retryErr == nil {
+		return retried, nil
+	}
+	return tr, err
+}
+
+// formatOrigRetryLog renders the outcome of the -orig retry as a log line
+// body. Without it a recovered retry leaves only the first attempt's
+// rate_limited failure in the log, and a failed retry reads as a second,
+// unrelated failure.
+func formatOrigRetryLog(language, retryLanguage string, elapsed time.Duration, err error) string {
+	outcome := "recovered"
+	if err != nil {
+		outcome = "failed category=" + classifyTranscriptError(err)
+	}
+	return fmt.Sprintf("lang=%s retry=%s outcome=%s duration=%s", language, retryLanguage, outcome, elapsed.Round(time.Millisecond))
+}
+
+// fetchSegmentsFromYtDlp is fetchSegmentsOnce plus the BUG-012 "-orig" retry.
+// It runs inside fetchTranscript's cache lookup, so a successful retry is
+// cached under the language the caller asked for. A call for any language
+// other than the requested one is the retry, and its outcome is logged.
+func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (parsedTranscript, error) {
+	return fetchWithOrigRetry(language, func(lang string) (parsedTranscript, error) {
+		start := time.Now()
+		tr, err := fetchSegmentsOnce(ctx, videoID, lang)
+		if lang != language {
+			LogDownloadError(fmt.Sprintf("transcript_fetch_orig_retry %s", videoID),
+				formatOrigRetryLog(language, lang, time.Since(start), err))
+		}
+		return tr, err
+	})
+}
+
+// fetchSegmentsOnce runs one yt-dlp subtitle fetch for exactly the given
+// language code. Each attempt logs its own failure (with its own lang=).
+func fetchSegmentsOnce(ctx context.Context, videoID, language string) (tr parsedTranscript, err error) {
 	start := time.Now()
 	defer func() {
 		if err != nil {

@@ -41,7 +41,7 @@ Model bindings. Use the row whose `tool` is the sub-agent tool you actually
 hold (check your tool list, do not guess) and whose `status=ok`:
 
 <!-- eagd-bindings:start -->
-eagd-binding: role=advise tool=Agent model=opus status=ok probed=2026-09-19 reported=claude-opus-5
+eagd-binding: role=advise tool=Agent model=opus status=ok probed=2026-09-26 reported=claude-opus-5-5
 eagd-binding: role=grade tool=Agent model=haiku status=ok probed=2026-09-19 reported=claude-haiku-4-5-20251001
 <!-- eagd-bindings:end -->
 
