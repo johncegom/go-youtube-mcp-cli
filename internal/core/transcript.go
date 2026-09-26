@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -375,23 +377,34 @@ func origRetryLanguage(category, language string) string {
 	return language + "-orig"
 }
 
-// fetchWithOrigRetry calls fetch for language and, if that is rate limited,
-// once more for its "-orig" track. A failed retry returns the ORIGINAL error:
+// fetchWithPlan calls fetch for each language of plan in order (see
+// fetchPlan) and returns the first success. If every attempt fails it returns
+// the error of the attempt for the REQUESTED language, the plan's last entry:
 // for an explicit "en" on a non-English video "en-orig" has no track, and its
 // "no captions" error must not replace the rate-limited diagnosis (BUG-011).
-func fetchWithOrigRetry(language string, fetch func(language string) (parsedTranscript, error)) (parsedTranscript, error) {
-	tr, err := fetch(language)
-	if err == nil {
-		return tr, nil
+// After a rate-limited failure of the requested language its "-orig" track is
+// tried once more (BUG-012), unless the plan already attempted it.
+func fetchWithPlan(plan []string, fetch func(language string) (parsedTranscript, error)) (parsedTranscript, error) {
+	requested := plan[len(plan)-1]
+	var reqTr parsedTranscript
+	var reqErr error
+	for _, lang := range plan {
+		tr, err := fetch(lang)
+		if err == nil {
+			return tr, nil
+		}
+		if lang == requested {
+			reqTr, reqErr = tr, err
+		}
 	}
-	retry := origRetryLanguage(classifyTranscriptError(err), language)
-	if retry == "" {
-		return tr, err
+	retry := origRetryLanguage(classifyTranscriptError(reqErr), requested)
+	if retry == "" || slices.Contains(plan, retry) {
+		return reqTr, reqErr
 	}
 	if retried, retryErr := fetch(retry); retryErr == nil {
 		return retried, nil
 	}
-	return tr, err
+	return reqTr, reqErr
 }
 
 // formatOrigRetryLog renders the outcome of the -orig retry as a log line
@@ -406,20 +419,75 @@ func formatOrigRetryLog(language, retryLanguage string, elapsed time.Duration, e
 	return fmt.Sprintf("lang=%s retry=%s outcome=%s duration=%s", language, retryLanguage, outcome, elapsed.Round(time.Millisecond))
 }
 
-// fetchSegmentsFromYtDlp is fetchSegmentsOnce plus the BUG-012 "-orig" retry.
-// It runs inside fetchTranscript's cache lookup, so a successful retry is
-// cached under the language the caller asked for. A call for any language
-// other than the requested one is the retry, and its outcome is logged.
+// timedtextURLRe finds the caption URLs yt-dlp prints in verbose mode, on
+// success as well as failure ("[debug] Invoking http downloader on "...").
+var timedtextURLRe = regexp.MustCompile(`Invoking http downloader on "([^"]*timedtext[^"]*)"`)
+
+// timedtextTranslation returns the source language and target ("tlang") of the
+// first caption URL in yt-dlp's verbose output that requests a translation, or
+// empty strings. A plain "en" request can "succeed" as a machine
+// back-translation (lang=uk&tlang=en) with no error at all, which the retry
+// cannot see (docs/tasks/20-guarded-orig-first).
+func timedtextTranslation(output string) (source, tlang string) {
+	for _, m := range timedtextURLRe.FindAllStringSubmatch(output, -1) {
+		u, err := url.Parse(m[1])
+		if err != nil {
+			continue
+		}
+		if tl := u.Query().Get("tlang"); tl != "" {
+			return u.Query().Get("lang"), tl
+		}
+	}
+	return "", ""
+}
+
+// formatTranslatedLog renders a fetch that succeeded on a translated track.
+func formatTranslatedLog(language, source, tlang string) string {
+	return fmt.Sprintf("lang=%s source=%s tlang=%s", language, source, tlang)
+}
+
+// formatPlanLog renders the outcome of a multi-attempt plan; succeeded is the
+// language that returned a transcript, "" if every attempt failed.
+func formatPlanLog(language string, plan []string, succeeded string, elapsed time.Duration) string {
+	outcome := succeeded
+	if outcome == "" {
+		outcome = "failed"
+	}
+	return fmt.Sprintf("lang=%s plan=%s outcome=%s duration=%s", language, strings.Join(plan, ","), outcome, elapsed.Round(time.Millisecond))
+}
+
+// fetchOnce is the single-attempt fetch; a variable so tests can run the plan
+// and cache composition without yt-dlp.
+var fetchOnce = fetchSegmentsOnce
+
+// fetchSegmentsFromYtDlp runs fetchWithPlan over the plan decided from the
+// captionInfo already in memory (peek only, never a request: a cold memo gives
+// today's [language]) plus the BUG-012 "-orig" retry. It runs inside
+// fetchTranscript's cache lookup, so a success from "-orig" is cached under the
+// language the caller asked for. An attempt the plan did not include is the
+// rate-limit retry, and its outcome is logged.
 func fetchSegmentsFromYtDlp(ctx context.Context, videoID, language string) (parsedTranscript, error) {
-	return fetchWithOrigRetry(language, func(lang string) (parsedTranscript, error) {
+	info, warm := peekCaptionInfo(videoID)
+	plan := fetchPlan(info, warm, language)
+	planStart := time.Now()
+	succeeded := ""
+	tr, err := fetchWithPlan(plan, func(lang string) (parsedTranscript, error) {
 		start := time.Now()
-		tr, err := fetchSegmentsOnce(ctx, videoID, lang)
-		if lang != language {
+		tr, err := fetchOnce(ctx, videoID, lang)
+		if err == nil {
+			succeeded = lang
+		}
+		if !slices.Contains(plan, lang) {
 			LogDownloadError(fmt.Sprintf("transcript_fetch_orig_retry %s", videoID),
 				formatOrigRetryLog(language, lang, time.Since(start), err))
 		}
 		return tr, err
 	})
+	if len(plan) > 1 {
+		LogDownloadError(fmt.Sprintf("transcript_fetch_plan %s", videoID),
+			formatPlanLog(language, plan, succeeded, time.Since(planStart)))
+	}
+	return tr, err
 }
 
 // fetchSegmentsOnce runs one yt-dlp subtitle fetch for exactly the given
@@ -519,6 +587,9 @@ func fetchSegmentsOnce(ctx context.Context, videoID, language string) (tr parsed
 	segments := parseVtt(raw)
 	if len(segments) == 0 {
 		return parsedTranscript{}, fmt.Errorf("no transcript found for video %s", videoID)
+	}
+	if source, tlang := timedtextTranslation(stdoutBuf.String() + stderrBuf.String()); tlang != "" {
+		LogDownloadError(fmt.Sprintf("transcript_fetch_translated %s", videoID), formatTranslatedLog(language, source, tlang))
 	}
 	if elapsed := time.Since(start); elapsed > transcriptFetchSlowThreshold {
 		LogDownloadError(fmt.Sprintf("transcript_fetch_slow %s", videoID),
