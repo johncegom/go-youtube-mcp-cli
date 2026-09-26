@@ -1,0 +1,75 @@
+=== r8CppXSqVDU
+exit=0
+--- stderr:
+language: vi (auto-detected spoken language)
+--- stdout head:
+100 tuổi là con số bạn phải đạt được nếu muốn được rút bảo hiểm. Trong khi số người trên 100 tuổi ở Việt Nam thì chỉ khoảng 0,7%. Có nghĩa là nếu may
+=== B9MBdB1Ih6Q
+exit=0
+--- stderr:
+language: vi (auto-detected spoken language)
+--- stdout head:
+Vào chiều ngày 24 tháng , một người đàn ông bị nước lũ cuốn trôi mắc kẹt giữa dòng nước chảy siết tại thôn Nhơn Hội, xã Hàm Liêm, tỉnh Lâm Đồng. Nh�
+=== Za_PoC0D3CQ
+exit=0
+--- stderr:
+language: vi (auto-detected spoken language)
+--- stdout head:
+Chiều nay, một vụ án mạng xảy ra tại khu vực kios cho thuê trên đường Hồ Văn Tắng, xã Củ Chi, thành phố Hồ Chí Minh khiến hai người tử vong, hai người bị
+=== fdkYE4uxL0A
+exit=0
+--- stderr:
+language: vi (auto-detected spoken language)
+--- stdout head:
+[âm nhạc] Chào mừng quý vị đến với chương trình 60 giây của Đài phát thanh và truyền hình thuộc cơ quan báo và phát thanh truyền hình thành phố Hồ Chí Minh. >
+=== cZSgL76ddDs
+exit=0
+--- stderr:
+language: de (auto-detected spoken language)
+--- stdout head:
+[räuspern] Willkommen und guten Morgen Anna Schneider hier bei uns im Studio. Schönen guten Morgen. Meine Welt, meine Meinung. Hoffnung. Meine Hoffnung liegt heute bei den Grünen, muss ich sagen. A
+=== 0n5AYXkXP3Y
+exit=0
+--- stderr:
+language: de (auto-detected spoken language)
+--- stdout head:
+Und heute gucken wir ganz genau noch mal auf die Tankstellen. Und dieser Blick, der tut eigentlich allen Autofahrern in der letzten Zeit weh. Ich selber habe jetzt schon in den letzten Wochen oft auch
+=== iLnTZhrkUpA
+exit=0
+--- stderr:
+language: de (auto-detected spoken language)
+--- stdout head:
+Es geht Schlag auf Schlag, denn jetzt ist uns zugeschaltet Dietmar Wutke von der SPD, der Ministerpräsident Brandenburg. Herr Wutke, ich grüße Sie, liebe Grüße in den Bundesrat. Hallo Frau Dmann,
+=== vyIgAO8aCbA
+exit=0
+--- stderr:
+--- stdout head:
+Well, let me ask a follow-up question on that then. This comes from Jack saying who says what's your mindset when you see so many of these high flyers? Not the GME or meme stocks, but more like the bi
+=== 9EUTRL_4Cj8
+exit=0
+--- stderr:
+language: vi (auto-detected spoken language)
+--- stdout head:
+Mình là người rất lười đọc sách là vì mình đọc rất chậm và mỗi lần cầm tới cuốn sách là mình buồn ngủ. Mình thấy là việc học hỏi bằng tương tác
+=== z0hwcaKiHvQ
+exit=0
+--- stderr:
+language: ja (auto-detected spoken language)
+--- stdout head:
+日本時間決鎖アメリカに到着した中国の 集近平国家主席 タラップ[音楽]を降りた先に待っていた のはトランプ大統領です。 早速握手を求め言葉を�
+=== dQw4w9WgXcQ
+exit=0
+--- stderr:
+--- stdout head:
+[♪♪♪] ♪ We're no strangers to love ♪ ♪ You know the rules and so do I ♪ ♪ A full commitment's what I'm thinking of ♪ ♪ You wouldn't get this from any other guy ♪ ♪ I just wanna
+=== X0UI0O8YzJM
+exit=0
+--- stderr:
+--- stdout head:
+AI is changing software development faster than any technology shift we've seen in decades. 40 years ago, when I was banging out code in the early days of my career, the process was incredibly complex
+=== r8CppXSqVDU --language en
+exit=1
+--- stderr:
+error: YouTube rejected the caption download for video r8CppXSqVDU (HTTP 429). If the video isn't spoken in English, retry with the language option set to its spoken language (CLI: --language): the default "en" asks for a machine-translated track, which YouTube rejects. Otherwise this may be a temporary throttle; wait before retrying or use a different network.
+--- stdout head:
+

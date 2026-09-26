@@ -14,8 +14,8 @@ import (
 // omits `language`, ResolveLanguage picks the language from the watch
 // page's captionTracks instead — see docs/tasks/18-native-language-fallback.
 
-// captionTracksResponse mirrors the one path of ytInitialPlayerResponse this
-// file reads: captions.playerCaptionsTracklistRenderer.captionTracks.
+// captionTracksResponse mirrors the paths of ytInitialPlayerResponse this file
+// reads: captions.playerCaptionsTracklistRenderer.{captionTracks,audioTracks}.
 type captionTracksResponse struct {
 	Captions struct {
 		Renderer struct {
@@ -23,37 +23,155 @@ type captionTracksResponse struct {
 				LanguageCode string `json:"languageCode"`
 				Kind         string `json:"kind"`
 			} `json:"captionTracks"`
+			AudioTracks []struct {
+				AudioTrackID string `json:"audioTrackId"`
+			} `json:"audioTracks"`
 		} `json:"playerCaptionsTracklistRenderer"`
 	} `json:"captions"`
 }
 
-// resolveDefaultLanguage picks the language to request when the caller
-// omitted one, from a ytInitialPlayerResponse JSON payload:
-//  1. any English track (manual or ASR) -> "en", today's behavior, so a
-//     video with uploaded English subtitles is never switched away from them;
-//  2. else the auto-generated (kind "asr") track's language, which is the
-//     language actually spoken — the first one if there are several;
-//  3. else "en" (no captions at all, unparseable payload), i.e. today's
-//     path and today's error.
-//
-// It never returns "".
-func resolveDefaultLanguage(playerResponse []byte) string {
+// captionTrack is one caption track; Kind "asr" is auto-generated, "" uploaded.
+type captionTrack struct{ Language, Kind string }
+
+// captionInfo is what the resolution reads from a watch page.
+type captionInfo struct {
+	Tracks   []captionTrack
+	AudioIDs []string // audioTracks[].audioTrackId, in page order
+}
+
+// parseCaptions extracts captionInfo from a ytInitialPlayerResponse payload;
+// nil or garbage yields the zero value.
+func parseCaptions(playerResponse []byte) captionInfo {
 	var pr captionTracksResponse
 	if err := json.Unmarshal(playerResponse, &pr); err != nil {
-		return "en"
+		return captionInfo{}
 	}
-	tracks := pr.Captions.Renderer.CaptionTracks
+	var info captionInfo
+	for _, t := range pr.Captions.Renderer.CaptionTracks {
+		info.Tracks = append(info.Tracks, captionTrack{Language: t.LanguageCode, Kind: t.Kind})
+	}
+	for _, a := range pr.Captions.Renderer.AudioTracks {
+		info.AudioIDs = append(info.AudioIDs, a.AudioTrackID)
+	}
+	return info
+}
+
+// originalAudioLanguage returns the video's original audio language from the
+// audioTrackId list: on videos with YouTube's auto-dubbing structure exactly
+// one id ends ".4" ("vi.4", "de-DE.4") and the rest end ".10" (dubbed). Any
+// other shape — none, several, or an id with no language — is unknown, and the
+// caller falls back to the track-only rules (docs/BUGS.md BUG-013).
+func originalAudioLanguage(ids []string) (string, bool) {
+	lang, n := "", 0
+	for _, id := range ids {
+		if strings.HasSuffix(id, ".4") {
+			lang = strings.TrimSuffix(id, ".4")
+			n++
+		}
+	}
+	if n != 1 || lang == "" {
+		return "", false
+	}
+	return lang, true
+}
+
+func baseLanguage(code string) string {
+	base, _, _ := strings.Cut(code, "-")
+	return base
+}
+
+func isEnglishCode(code string) bool {
+	return code == "en" || strings.HasPrefix(code, "en-")
+}
+
+// isRegionSuffix reports whether s looks like a region ("DE", "BR", "419"),
+// as opposed to a custom variant id ("eEY6OEpapPo").
+func isRegionSuffix(s string) bool {
+	if len(s) == 3 {
+		return s[0] >= '0' && s[0] <= '9' && s[1] >= '0' && s[1] <= '9' && s[2] >= '0' && s[2] <= '9'
+	}
+	return len(s) == 2 && s[0] >= 'A' && s[0] <= 'Z' && s[1] >= 'A' && s[1] <= 'Z'
+}
+
+// findTrack finds the track of the wanted kind (asr = auto-generated) for
+// language lang, preferring an exact code, then the bare base language or a
+// region-shaped variant of it ("de" / "de-DE" / "es-419"), then any other
+// same-base track. It returns the track's own code — yt-dlp's --sub-langs is a
+// full match — except that English is always the literal "en", so an English
+// video's resolved language, filenames and notes stay as they were.
+func findTrack(tracks []captionTrack, lang string, asr bool) (string, bool) {
+	base := baseLanguage(lang)
+	best, bestRank := "", 4
 	for _, t := range tracks {
-		if t.LanguageCode == "en" || strings.HasPrefix(t.LanguageCode, "en-") {
+		if (t.Kind == "asr") != asr || t.Language == "" || baseLanguage(t.Language) != base {
+			continue
+		}
+		rank := 3
+		switch _, suffix, has := strings.Cut(t.Language, "-"); {
+		case t.Language == lang:
+			rank = 1
+		case !has || isRegionSuffix(suffix):
+			rank = 2
+		}
+		if rank < bestRank {
+			best, bestRank = t.Language, rank
+		}
+	}
+	if bestRank == 4 {
+		return "", false
+	}
+	if base == "en" {
+		return "en", true
+	}
+	return best, true
+}
+
+// resolveFromCaptions picks the language to request when the caller omitted
+// one. When the original audio language O is known (originalAudioLanguage):
+//  1. an uploaded track in O -> that track;
+//  2. else an uploaded English track -> "en" (the machine-translated auto
+//     English of a non-English video is what 429s, BUG-011);
+//  3. else the auto-generated track in O (BUG-013: YouTube adds a dubbed auto
+//     "en" track to non-English videos, so "any en track" no longer means
+//     English speech).
+//
+// Then, always, and the only path when O is unknown or has no track:
+//  4. any English track (manual or ASR) -> "en", today's behavior;
+//  5. else the first auto-generated track's language;
+//  6. else "en" (no captions at all), i.e. today's path and today's error.
+//
+// It never returns "".
+func resolveFromCaptions(info captionInfo) string {
+	if o, ok := originalAudioLanguage(info.AudioIDs); ok {
+		if lang, ok := findTrack(info.Tracks, o, false); ok {
+			return lang
+		}
+		for _, t := range info.Tracks {
+			if t.Kind != "asr" && isEnglishCode(t.Language) {
+				return "en"
+			}
+		}
+		if lang, ok := findTrack(info.Tracks, o, true); ok {
+			return lang
+		}
+	}
+	for _, t := range info.Tracks {
+		if isEnglishCode(t.Language) {
 			return "en"
 		}
 	}
-	for _, t := range tracks {
-		if t.Kind == "asr" && t.LanguageCode != "" {
-			return t.LanguageCode
+	for _, t := range info.Tracks {
+		if t.Kind == "asr" && t.Language != "" {
+			return t.Language
 		}
 	}
 	return "en"
+}
+
+// resolveDefaultLanguage is parseCaptions followed by resolveFromCaptions,
+// from a ytInitialPlayerResponse JSON payload. It never returns "".
+func resolveDefaultLanguage(playerResponse []byte) string {
+	return resolveFromCaptions(parseCaptions(playerResponse))
 }
 
 // languageMemo remembers the resolved language per video so that only the
