@@ -170,6 +170,23 @@ func TestPickVttFile(t *testing.T) {
 			language: "en",
 			want:     "sub.en.vtt",
 		},
+		// BUG-012: the -orig retry requests "<lang>-orig", so the file is
+		// "sub.<lang>-orig.vtt". It must match exactly for language "en-orig"
+		// (the retry's own call), and the first-.vtt fallback must still
+		// return it if a plain "en" is asked for — pinned so tightening the
+		// fallback can't silently break the retry.
+		{
+			name:     "orig track matches its own language exactly",
+			files:    []string{"sub.en-orig.vtt"},
+			language: "en-orig",
+			want:     "sub.en-orig.vtt",
+		},
+		{
+			name:     "orig track alone is still picked for plain en via the fallback",
+			files:    []string{"sub.en-orig.vtt"},
+			language: "en",
+			want:     "sub.en-orig.vtt",
+		},
 		{
 			name:     "falls back to first .vtt when no exact match",
 			files:    []string{"sub.en-de-DE.vtt", "sub.en-ja.vtt"},
