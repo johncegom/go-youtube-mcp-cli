@@ -1,11 +1,18 @@
 # Task 21: Resolve the default language from the video's original language (BUG-013 fix)
 
-**Status:** DRAFT rev 2 (2026-09-27) — Definition of Done + Test Plan **not yet
-approved by the human**; nothing here is implemented. Fixes `docs/BUGS.md`
-BUG-013 (option 1, decided in principle by the human 2026-09-27). Rev 2
-incorporates an Advise call (logged in `docs/eagd-log.md`). Written on the
+**Status:** APPROVED, not started (2026-09-27) — the human approved this
+Definition of Done + Test Plan as drafted (rev 2); **nothing here is implemented
+yet.** Fixes `docs/BUGS.md` BUG-013 (option 1, decided by the human 2026-09-27).
+Rev 2 incorporates an Advise call (logged in `docs/eagd-log.md`). Written on the
 `docs/bug-012-measurement-evidence` branch beside the evidence it rests on
 (`docs/evidence/bug-013/`).
+
+**What the approval covers, and what it does not.** Approved: the scope as
+written — the precedence applies only where the original language is known from
+the `.4` id — and the reading that "the English" is the *uploaded* English track.
+**Not decided:** the "Open question for the human" below (extending the rule to
+videos without the dubbing structure); it stays out of this task and needs its own
+decision. If implementation reaches a case this file does not settle, stop and ask.
 
 ## User need
 
@@ -253,4 +260,9 @@ resolveDefaultLanguage`.
   tie-break order for variant-coded tracks; name the "single wrong `.4`" mode.
   Verified before adopting: (b)'s steps 2 and 3 equal today's rules 1 and 2, so
   only step 1 differs; my derivation of the existing cases matched Advise's.
-  Taken: all of the above. Human review: **pending.**
+  Taken: all of the above.
+- 2026-09-27: **Human review: approved as drafted** ("approve task 21"). The two
+  confirmation questions put to the human with the draft (the "uploaded English"
+  reading, and the general version) were not answered separately; approval is
+  recorded as covering the first (accepted by approving the text) and **not** the
+  second (still an open, separate decision).
