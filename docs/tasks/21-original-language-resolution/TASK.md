@@ -1,8 +1,7 @@
 # Task 21: Resolve the default language from the video's original language (BUG-013 fix)
 
-**Status:** APPROVED, not started (2026-09-27) — the human approved this
-Definition of Done + Test Plan as drafted (rev 2); **nothing here is implemented
-yet.** Fixes `docs/BUGS.md` BUG-013 (option 1, decided by the human 2026-09-27).
+**Status:** IMPLEMENTED on branch `fix/bug-013-original-language` (2026-09-27), Grade passed, not pushed/merged. The human approved this
+Definition of Done + Test Plan as drafted (rev 2). Fixes `docs/BUGS.md` BUG-013 (option 1, decided by the human 2026-09-27).
 Rev 2 incorporates an Advise call (logged in `docs/eagd-log.md`). Written on the
 `docs/bug-012-measurement-evidence` branch beside the evidence it rests on
 (`docs/evidence/bug-013/`).
@@ -84,11 +83,11 @@ resolves are fetchable.
 
 ## Definition of Done
 
-`[x]` done · `[ ]` not started. **Only 21.0b blocks coding.**
+`[x]` done · `[ ]` not started. **Only 21.0b blocked coding.**
 
-- [ ] 21.0 **Research**:
+- [x] 21.0 **Research**:
   - [x] 21.0a *Resolved codes are fetchable* — done 2026-09-27 (above).
-  - [ ] 21.0b **(blocks coding)** *Real fixtures.* Capture trimmed real
+  - [x] 21.0b **(blocks coding)** *Real fixtures.* Capture trimmed real
     `captionTracks` + `audioTracks` payloads (long `baseUrl`s stripped, as task 18
     did) for `r8CppXSqVDU` (auto `en-US` then `vi`; audio `vi.4` + `en-US.10`),
     `cZSgL76ddDs` (auto `en-US`, `de`; `de-DE.4` + one `.10`) and `vyIgAO8aCbA`
@@ -97,14 +96,14 @@ resolves are fetchable.
     the `.4` id's real position** (it is not first in `audioTracks`; a
     "first match" bug must fail a test). The fixtures' comment states the date and
     that expected values are confirmed by the yt-dlp runs in `docs/evidence/bug-013/`.
-  - [ ] 21.0c *(informative)* Find a real non-English video with the dubbing
+  - [x] 21.0c *(informative)* Find a real non-English video with the dubbing
     structure **and** uploaded English or original-language subtitles; record what
     the page says and what `--sub-langs <O>` returns, or say none was found. If
     step 1 or 2 cannot be shown on a real video, they are covered by unit tests
     only and 21.7 says so.
-  - [ ] 21.0d *(informative)* Creator-uploaded extra audio tracks (other
+  - [~] 21.0d *(informative — not searched)* Creator-uploaded extra audio tracks (other
     `audioTrackId` suffixes).
-- [ ] 21.1 Pure functions, test-first: `originalAudioLanguage(ids)`, `findTrack`
+- [x] 21.1 Pure functions, test-first: `originalAudioLanguage(ids)`, `findTrack`
   (the preference order above; English → `"en"`) and the new resolution over a
   parsed `captionInfo`. Table cases: the three real shapes from 21.0b; **`.4` =
   `vi`, uploaded `en` only, auto `vi` → `en` (step 2 beats step 3)**; **`.4` present
@@ -117,19 +116,19 @@ resolves are fetchable.
   `vi-abc123` loses to an exact/region-shaped match; **English stays `en`:**
   uploaded `en-US` + auto `en`, and `.4` `en-US` + auto `en` → `"en"`; malformed
   ids (`""`, `"x"`, `".4"`) → unknown.
-- [ ] 21.2 **No regression:** every existing `TestResolveDefaultLanguage` case
+- [x] 21.2 **No regression:** every existing `TestResolveDefaultLanguage` case
   passes with its expected value **unchanged; the diff to the existing table is
   additions only** (no edited or deleted cases), and
   `FuzzResolveDefaultLanguage` still never returns `""` and gets new seeds (an
   `audioTracks` payload, a truncated one). Note: no existing case distinguishes
   this task's behaviour from today's — the new cases in 21.1 must.
-- [ ] 21.3 **Parse/resolve split:** a parsed type `captionInfo{Tracks
+- [x] 21.3 **Parse/resolve split:** a parsed type `captionInfo{Tracks
   []captionTrack; AudioIDs []string}`, `parseCaptions(playerResponse)` and a
   pure `resolveFromCaptions(info)`; `resolveDefaultLanguage([]byte)` keeps its
   signature (= parse, then resolve), as do `ResolveLanguage`, the language memo,
   `LanguageNote` and the `lookupSpokenLanguage` seam, so the rest of
   `language_test.go` is untouched. (Task 20 will memoize `captionInfo`.)
-- [ ] 21.4 **Live smoke** (CLI built from the branch; record the yt-dlp version;
+- [x] 21.4 **Live smoke** (CLI built from the branch; record the yt-dlp version;
   paced ≥ 15 s; **record the resolved language from the note or `errors.log` for
   every video**, not only the transcript's language): `r8CppXSqVDU`,
   `B9MBdB1Ih6Q`, `Za_PoC0D3CQ`, `fdkYE4uxL0A`, language omitted → Vietnamese
@@ -140,15 +139,15 @@ resolves are fetchable.
   `en` (explicit language is honoured, BUG-011 message as before). If YouTube
   changes the structure, the smoke proves less and the unit tests are the coverage;
   say so.
-- [ ] 21.5 Docs: `docs/BUGS.md` BUG-013 decision + status; `docs/DECISIONS.md`
+- [x] 21.5 Docs: `docs/BUGS.md` BUG-013 decision + status; `docs/DECISIONS.md`
   DECISION-022 updated (the resolution order; why the `.4` id and not the
   viewer-dependent fields; why uploaded original-language subtitles now precede
   uploaded English on structured videos — the human's decision quoted); the
   ledger; task 20's Program design note; this file.
-- [ ] 21.6 `go build ./... && go vet ./... && go test ./... && gofmt -l internal/ cmd/`
+- [x] 21.6 `go build ./... && go vet ./... && go test ./... && gofmt -l internal/ cmd/`
   clean — **`gofmt -l` must print nothing** (it exits 0 even when it lists files);
   Grade run against these items.
-- [ ] 21.7 A note in this file records which of steps 1–3 were exercised on a real
+- [x] 21.7 A note in this file records which of steps 1–3 were exercised on a real
   video and which only by unit tests.
 
 ## Test Plan
@@ -243,6 +242,33 @@ resolveDefaultLanguage`.
 - Reading yt-dlp's `-J` `language` at runtime (rejected in BUG-013: an extra ~5 s
   per video when the page already carries the signal).
 - Languages beyond what 21.0c/21.4 happen to include.
+
+## Notes / deviations (implementation, 2026-09-27)
+
+- **21.0b:** fixtures are in `internal/core/language_fixtures_test.go`, captured with
+  `docs/evidence/bug-013/capture_fixtures.py` (all fields kept except `baseUrl`; real order;
+  `vyIgAO8aCbA`'s `.4` is 11th of 21).
+- **21.0c (real-video coverage):** `0n5AYXkXP3Y` and `iLnTZhrkUpA` have an uploaded `de` subtitle
+  (yt-dlp `--list-subs` for the first) and `de-DE.4`, so **step 1 ran on real videos** — but the
+  resolved code is `de` either way, so the smoke cannot tell an uploaded fetch from an auto one
+  (not checked). No video with uploaded English + original-language auto was found.
+- **21.0d:** not searched beyond the 41-video data, which shows only `.4` and `.10` suffixes.
+- **Tie-break not settled by the task:** in `findTrack` a bare-base track (`de` for wanted
+  `de-DE`) ranks with the region-shaped ones (rank 2), above custom-named variants; otherwise
+  `de` and `de-abc` would tie. No specified case changes.
+- **21.2:** the only edit to `language_test.go` is two added fuzz seeds; new cases live in
+  `language_original_test.go`. Fuzz 10 s: 76k execs, no failure.
+- **21.4 result:** 13/13 as specified, yt-dlp 2026.07.04, 15 s pacing
+  (`docs/evidence/bug-013/smoke-task21-results.txt`); resolved language read from the note
+  (`vi`/`de`/`ja`) or its absence (`en`); negative check `r8CppXSqVDU --language en` still gives the
+  BUG-011 429 message.
+- **21.7 — which steps were exercised where:** step 3 (auto original language) on real videos: the
+  4 Vietnamese and `cZSgL76ddDs` (no uploaded tracks). Step 1 (uploaded original) on real videos:
+  `0n5AYXkXP3Y`, `iLnTZhrkUpA` (see 21.0c caveat). **Step 2 (uploaded English beats auto original)
+  is unit-tested only**; so are the tie-break tiers and the malformed-id cases.
+- **Grade:** run on `haiku` against 21.0–21.7, no failing items (21.0c/d, 21.7 and the ledger/TASK.md
+  parts of 21.5 were pending by construction and are done here). The grader did not print its model id.
+- Also noted: a stray no-op subagent was spawned by mistake during grading; it did nothing.
 
 ## Review log
 

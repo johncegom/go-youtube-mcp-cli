@@ -52,7 +52,7 @@ this index) before pausing.
 | 18 | Resolve the default transcript language from the video's `captionTracks` (fixes the BUG-011 default-`en` trigger for `get_transcript*`/`search_transcript`/CLI) | [x] done | [docs/tasks/18-native-language-fallback/TASK.md](tasks/18-native-language-fallback/TASK.md) |
 | 19 | Apply spoken-language resolution to `download_transcript*` and `get_video_brief` (`search_playlist` intentionally left on `en`; closes most of DECISION-022's scope cut) | [x] done | [docs/tasks/19-language-resolution-remaining-tools/TASK.md](tasks/19-language-resolution-remaining-tools/TASK.md) |
 | 20 | Guarded, peek-only orig-first transcript fetch (BUG-012 follow-up; land task 21 first) | [ ] DRAFT — DoD + Test Plan not approved | [docs/tasks/20-guarded-orig-first/TASK.md](tasks/20-guarded-orig-first/TASK.md) |
-| 21 | Resolve the default language from the video's original language — the `.4` audio-track id (BUG-013 fix; land before task 20) | [ ] approved 2026-09-27, not started | [docs/tasks/21-original-language-resolution/TASK.md](tasks/21-original-language-resolution/TASK.md) |
+| 21 | Resolve the default language from the video's original language — the `.4` audio-track id (BUG-013 fix; land before task 20) | [x] implemented 2026-09-27 on `fix/bug-013-original-language`, Grade passed; awaiting push/merge | [docs/tasks/21-original-language-resolution/TASK.md](tasks/21-original-language-resolution/TASK.md) |
 
 ## Current status
 
@@ -241,5 +241,5 @@ promoted to a task gets a row in the table above and a `TASK.md`.
    auto-dubbing structure — 7 of 7 sampled — so task 18's fix regressed on real
    videos). Its research is done (`docs/evidence/bug-013/`; the signal is the `.4` id in
    `captions.audioTracks`). The human chose that option on 2026-09-27; its fix is
-   **task 21 (approved 2026-09-27, not started)**. Task 20 is a DRAFT that should follow it.
+   **task 21 (implemented 2026-09-27 on `fix/bug-013-original-language`, awaiting push/merge)**. Task 20 is a DRAFT that should follow it (its Program design must be revised to reuse `captionInfo`/`resolveFromCaptions`).
 5. After finishing a task: update **that task's `TASK.md`** with full detail first, then update this index's status column/checkbox for it, then pause and ask the human before starting the next task. If the task involved a deliberate design/scope tradeoff, log it in `docs/DECISIONS.md` too; if it surfaced a way-of-working lesson that generalizes beyond that one task, log it in `docs/RETRO.md`.

@@ -70,6 +70,8 @@ func FuzzResolveDefaultLanguage(f *testing.F) {
 	f.Add(playerResponseWithTracks(tracksViASROnly))
 	f.Add([]byte(`{"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"languageCode":`))
 	f.Add([]byte(``))
+	f.Add(playerResponseWithAudio(fxTracksVi, fxAudioVi))
+	f.Add([]byte(`{"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"languageCode":"vi","kind":"asr"}],"audioTracks":[{"audioTrackId":"vi.4"},{"audioTrackId":`))
 	f.Fuzz(func(t *testing.T, pr []byte) {
 		if got := resolveDefaultLanguage(pr); got == "" {
 			t.Errorf("resolveDefaultLanguage(%q) = \"\", want a non-empty language", pr)
