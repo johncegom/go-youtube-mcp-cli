@@ -51,6 +51,7 @@ this index) before pausing.
 | 17 | Composite `get_video_brief` tool (metadata + chapters + timed transcript + stats, per-section failure) | [x] done | [docs/tasks/17-video-brief/TASK.md](tasks/17-video-brief/TASK.md) |
 | 18 | Resolve the default transcript language from the video's `captionTracks` (fixes the BUG-011 default-`en` trigger for `get_transcript*`/`search_transcript`/CLI) | [x] done | [docs/tasks/18-native-language-fallback/TASK.md](tasks/18-native-language-fallback/TASK.md) |
 | 19 | Apply spoken-language resolution to `download_transcript*` and `get_video_brief` (`search_playlist` intentionally left on `en`; closes most of DECISION-022's scope cut) | [x] done | [docs/tasks/19-language-resolution-remaining-tools/TASK.md](tasks/19-language-resolution-remaining-tools/TASK.md) |
+| 20 | Guarded, peek-only orig-first transcript fetch (BUG-012 follow-up; decide BUG-013 first) | [ ] DRAFT — DoD + Test Plan not approved | [docs/tasks/20-guarded-orig-first/TASK.md](tasks/20-guarded-orig-first/TASK.md) |
 
 ## Current status
 
@@ -232,4 +233,9 @@ promoted to a task gets a row in the table above and a `TASK.md`.
    item is waiting: BUG-008's next live repro (PR #29's `Verbose()` +
    PID logging needs a Claude Desktop timeout to confirm it's useful). BUG-010 (auto-caption
    rolling-cue duplication in `parseVtt`) is fixed as of 2026-09-20.
+   BUG-012 (plain `en` 429s; retry with `<lang>-orig`) is fixed by PR #36 but stays
+   open for one limitation (silent back-translation); its evidence is in
+   `docs/evidence/bug-012/`. **BUG-013 is open and awaiting a human decision**
+   (`ResolveLanguage` returns `en` for `r8CppXSqVDU` again — task 18's fix
+   regressed on a real video). Task 20 is a DRAFT that should follow it.
 5. After finishing a task: update **that task's `TASK.md`** with full detail first, then update this index's status column/checkbox for it, then pause and ask the human before starting the next task. If the task involved a deliberate design/scope tradeoff, log it in `docs/DECISIONS.md` too; if it surfaced a way-of-working lesson that generalizes beyond that one task, log it in `docs/RETRO.md`.
