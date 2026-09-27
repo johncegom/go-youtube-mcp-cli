@@ -1,6 +1,6 @@
 # Task 20: Guarded orig-first transcript fetch (BUG-012 follow-up)
 
-**Status:** IMPLEMENTED on branch `feat/task-20-guarded-orig-first` (2026-09-27), Grade run, not merged. APPROVED rev 3 (2026-09-27) — the human approved this Definition of Done + Test Plan
+**Status:** DONE — merged in PR #42 (2026-09-27), Grade run. APPROVED rev 3 (2026-09-27) — the human approved this Definition of Done + Test Plan
 (rev 3: rev 2 + Program design revised after task 21). Restricted to English `L` (human decision after 20.0b). All sub-tasks done except 20.0c (not done, informative). Rev 2 incorporates an
 Advise call (logged in `docs/eagd-log.md`) and four checks run against its
 claims (see "Review log"). Written on the `docs/bug-012-measurement-evidence`
