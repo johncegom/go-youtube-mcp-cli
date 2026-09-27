@@ -230,9 +230,12 @@ promoted to a task gets a row in the table above and a `TASK.md`.
    `captionTracks`, DECISION-022) and task 19 (same resolution for the
    download tools and `get_video_brief`; `search_playlist` intentionally left
    on `en`) are done.** No task is currently approved to start
-   next — the next step is a new scoping pass with the human. One open
-   item is waiting: BUG-008's next live repro (PR #29's `Verbose()` +
-   PID logging needs a Claude Desktop timeout to confirm it's useful). BUG-010 (auto-caption
+   next — the next step is a new scoping pass with the human. BUG-008 is
+   fixed and verified (2026-09-15): PR #29's `Verbose()` + PID/kill-confirmation
+   logging diagnosed the root cause (a yt-dlp format probe stalling in the
+   Claude-Desktop-spawned environment); `NoCheckFormats()` on the transcript
+   fetch removed the stalling step, confirmed fixed against a live repro.
+   BUG-010 (auto-caption
    rolling-cue duplication in `parseVtt`) is fixed as of 2026-09-20.
    BUG-012 (plain `en` 429s; retry with `<lang>-orig`) is fixed by PR #36 but stays
    open for one limitation (silent back-translation); its evidence is in
