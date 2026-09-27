@@ -515,7 +515,7 @@ as:
 
 ## BUG-008: `get_transcript` reliably times out at ~30s through Claude Desktop, but succeeds instantly via the CLI for the identical video — fixed (yt-dlp format probe stalling in the Desktop-spawned environment)
 
-- **Status:** open
+- **Status:** fixed
 - **Discovered:** user-reported (Claude Desktop MCP client) session, 2026-09-08/09, against `kjoQPn--F7A`. Investigated live via the actual per-connection MCP log (`%LOCALAPPDATA%\Claude\Logs\mcp-server-youtube-mcp.log`) and this project's own `errors.log` (`os.UserCacheDir()/youtube-mcp/errors.log`).
 - **Reachability: yes** — real call path (`get_transcript`/other transcript tools → `core.GetTranscriptText`/etc. → `fetchSegmentsFromYtDlp`, `internal/core/transcript.go:244`), hit repeatedly by a real user in a real Claude Desktop session, not a test-only branch.
 - **Inherited from upstream:** no — no evidence tying this to TS-original behavior; looks specific to this machine's process/parent-process environment.
