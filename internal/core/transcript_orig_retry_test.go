@@ -43,7 +43,7 @@ func TestFetchWithOrigRetry(t *testing.T) {
 
 	t.Run("success on the first attempt makes no retry", func(t *testing.T) {
 		var calls []string
-		got, err := fetchWithOrigRetry("en", func(lang string) (parsedTranscript, error) {
+		got, err := fetchWithPlan([]string{"en"}, func(lang string) (parsedTranscript, error) {
 			calls = append(calls, lang)
 			return want, nil
 		})
@@ -57,7 +57,7 @@ func TestFetchWithOrigRetry(t *testing.T) {
 
 	t.Run("429 then successful -orig retry returns the retry's transcript", func(t *testing.T) {
 		var calls []string
-		got, err := fetchWithOrigRetry("en", func(lang string) (parsedTranscript, error) {
+		got, err := fetchWithPlan([]string{"en"}, func(lang string) (parsedTranscript, error) {
 			calls = append(calls, lang)
 			if lang == "en" {
 				return parsedTranscript{}, errRateLimited
@@ -77,7 +77,7 @@ func TestFetchWithOrigRetry(t *testing.T) {
 		// so the retry's own error ("no transcript ... captions in language")
 		// must not replace BUG-011's rate-limited diagnosis.
 		retryErr := errors.New(`no transcript available for video x. The video may not have captions in language "en-orig"`)
-		_, err := fetchWithOrigRetry("en", func(lang string) (parsedTranscript, error) {
+		_, err := fetchWithPlan([]string{"en"}, func(lang string) (parsedTranscript, error) {
 			if lang == "en" {
 				return parsedTranscript{}, errRateLimited
 			}
@@ -90,7 +90,7 @@ func TestFetchWithOrigRetry(t *testing.T) {
 
 	t.Run("429 on an explicit -orig language is not retried", func(t *testing.T) {
 		var calls []string
-		_, err := fetchWithOrigRetry("en-orig", func(lang string) (parsedTranscript, error) {
+		_, err := fetchWithPlan([]string{"en-orig"}, func(lang string) (parsedTranscript, error) {
 			calls = append(calls, lang)
 			return parsedTranscript{}, errRateLimited
 		})
@@ -105,7 +105,7 @@ func TestFetchWithOrigRetry(t *testing.T) {
 	t.Run("non-429 failure is returned without a retry", func(t *testing.T) {
 		timeoutErr := errors.New("transcript fetch timed out")
 		var calls []string
-		_, err := fetchWithOrigRetry("en", func(lang string) (parsedTranscript, error) {
+		_, err := fetchWithPlan([]string{"en"}, func(lang string) (parsedTranscript, error) {
 			calls = append(calls, lang)
 			return parsedTranscript{}, timeoutErr
 		})

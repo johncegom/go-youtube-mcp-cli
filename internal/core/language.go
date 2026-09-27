@@ -224,25 +224,94 @@ func (l *languageMemo) resolve(videoID string, lookup func() (string, error)) st
 
 var defaultLanguageMemo = newLanguageMemo(256)
 
-// lookupSpokenLanguage fetches the watch page and resolves the default
-// language from it. It is a variable so tests can run ResolveLanguage
-// without the network.
-var lookupSpokenLanguage = func(ctx context.Context, videoID string) (string, error) {
+// infoMemo remembers each video's parsed captionInfo so that the language
+// resolution and the fetch plan (docs/tasks/20-guarded-orig-first) share one
+// watch-page fetch. Same shape as languageMemo: bounded by clearing itself
+// when full — a page re-fetch is cheap, so no TTL or LRU.
+type infoMemo struct {
+	mu  sync.Mutex
+	cap int
+	m   map[string]captionInfo
+}
+
+func newInfoMemo(cap int) *infoMemo {
+	return &infoMemo{cap: cap, m: make(map[string]captionInfo)}
+}
+
+func (i *infoMemo) size() int {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return len(i.m)
+}
+
+func (i *infoMemo) get(videoID string) (captionInfo, bool) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	info, ok := i.m[videoID]
+	return info, ok
+}
+
+func (i *infoMemo) put(videoID string, info captionInfo) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if len(i.m) >= i.cap {
+		i.m = make(map[string]captionInfo)
+	}
+	i.m[videoID] = info
+}
+
+var defaultInfoMemo = newInfoMemo(256)
+
+// lookupCaptionInfo fetches the watch page and parses its captionInfo. It is a
+// variable so tests can run without the network.
+var lookupCaptionInfo = func(ctx context.Context, videoID string) (captionInfo, error) {
 	html, err := fetchWatchPageHTML(ctx, videoID)
 	if err != nil {
-		return "", err
+		return captionInfo{}, err
 	}
 	m := ytInitialPlayerRe.FindStringSubmatch(html)
 	if m == nil {
 		// Not memoized: a page without a player response is more likely a
 		// transient oddity than a stable property of the video.
-		return "", errors.New("no ytInitialPlayerResponse in watch page")
+		return captionInfo{}, errors.New("no ytInitialPlayerResponse in watch page")
 	}
 	raw := m[1]
 	if raw == "" {
 		raw = m[2]
 	}
-	return resolveDefaultLanguage([]byte(raw)), nil
+	return parseCaptions([]byte(raw)), nil
+}
+
+// captionInfoFor returns the video's captionInfo, fetching the watch page on a
+// memo miss. It reports !ok on a lookup error, which is not memoized.
+func captionInfoFor(ctx context.Context, videoID string) (captionInfo, bool) {
+	if info, ok := defaultInfoMemo.get(videoID); ok {
+		return info, true
+	}
+	info, err := lookupCaptionInfo(ctx, videoID)
+	if err != nil {
+		return captionInfo{}, false
+	}
+	defaultInfoMemo.put(videoID, info)
+	return info, true
+}
+
+// peekCaptionInfo reads the memo only and NEVER touches the network, so the
+// fetch path can use the page data when a language resolution already fetched
+// it, without adding a request or latency when it did not.
+func peekCaptionInfo(videoID string) (captionInfo, bool) {
+	return defaultInfoMemo.get(videoID)
+}
+
+// lookupSpokenLanguage resolves the default language from the video's
+// captionInfo. It is a variable so tests can run ResolveLanguage without the
+// network.
+var lookupSpokenLanguage = func(ctx context.Context, videoID string) (string, error) {
+	info, ok := captionInfoFor(ctx, videoID)
+	if !ok {
+		return "", errors.New("caption info unavailable")
+	}
+	return resolveFromCaptions(info), nil
 }
 
 // ResolveLanguage returns the language to fetch a transcript in. An explicit
@@ -322,4 +391,29 @@ func SaveTranscriptFileResolved(ctx context.Context, videoID, requested, outputD
 		return "", "", err
 	}
 	return path, LanguageNote(requested, language), nil
+}
+
+// hasUploadedTrack reports whether an uploaded (non-auto) track exists for
+// lang, matching lang itself or any "lang-*" code. Prefix, not exact, on
+// purpose: a variant-coded uploaded track ("en-eEY6OEpapPo") is not fetched by
+// yt-dlp's plain "en", but treating it as present errs toward today's plain
+// fetch, the safe side (docs/tasks/20-guarded-orig-first).
+func hasUploadedTrack(tracks []captionTrack, lang string) bool {
+	for _, t := range tracks {
+		if t.Kind != "asr" && (t.Language == lang || strings.HasPrefix(t.Language, lang+"-")) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasASRTrack reports whether an auto-generated track with exactly this code
+// exists — the page-side signal that yt-dlp lists "<lang>-orig".
+func hasASRTrack(tracks []captionTrack, lang string) bool {
+	for _, t := range tracks {
+		if t.Kind == "asr" && t.Language == lang {
+			return true
+		}
+	}
+	return false
 }

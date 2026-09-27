@@ -1,7 +1,7 @@
 # Task 20: Guarded orig-first transcript fetch (BUG-012 follow-up)
 
-**Status:** APPROVED rev 3, not started (2026-09-27) — the human approved this Definition of Done + Test Plan
-(rev 3: rev 2 + Program design revised after task 21); **nothing here is implemented.** Next step: the human decides the 20.0b outcome (restrict the plan to base-`en` `L`, or keep it general); then 20.1. Rev 2 incorporates an
+**Status:** IMPLEMENTED on branch `feat/task-20-guarded-orig-first` (2026-09-27), Grade run, not merged. APPROVED rev 3 (2026-09-27) — the human approved this Definition of Done + Test Plan
+(rev 3: rev 2 + Program design revised after task 21). Restricted to English `L` (human decision after 20.0b). All sub-tasks done except 20.0c (not done, informative). Rev 2 incorporates an
 Advise call (logged in `docs/eagd-log.md`) and four checks run against its
 claims (see "Review log"). Written on the `docs/bug-012-measurement-evidence`
 branch next to the evidence it rests on.
@@ -68,9 +68,11 @@ Decide the attempt order **before** the first yt-dlp call, from the track list
    adds **no request and no latency**, and leaves DECISION-022's playlist scope
    cut intact.
 2. **Plan** for requested language `L` (pure):
-   - memo cold, `L` already ends in `-orig`, or an uploaded track exists for
+   - memo cold, `L` already ends in `-orig`, `L`'s base language is not `en`, or an
+     uploaded track exists for
      `L` (`L` or `L-*`, i.e. **prefix**, see below) → `[L]`;
-   - else an `asr` track with `languageCode == L` exists → `[L-orig, L]`;
+   - else, **only when `L`'s base language is `en`** (human decision after 20.0b), an
+     `asr` track with `languageCode == L` exists → `[L-orig, L]`;
    - else → `[L]`.
 3. **Run** the plan in order; the first success wins. If every attempt fails,
    return the error of the attempt for the **requested** language `L` (a
@@ -102,7 +104,7 @@ Explicitly **not** doing:
 
 `[x]` done · `[ ]` not started. Numbering follows task 10's sub-task pattern.
 
-- [ ] 20.0 **Research (20.0b now gates the plan for non-English `L`; the rest are informative)** — a negative
+- [x] 20.0 **Research (20.0b now gates the plan for non-English `L`; the rest are informative)** — a negative
   or "could not find one" result is a valid outcome, recorded in
   `docs/evidence/bug-012/`:
   - [x] 20.0a *Page track codes vs yt-dlp `-orig` keys* — done 2026-09-27:
@@ -136,14 +138,15 @@ Explicitly **not** doing:
     the plan (`fetchPlan` returns `[L]` unless base(L) is `en`) so it goes to the human
     before 20.1 is written**; caveats: n = 7, only vi/de, one day, no non-English
     video that 429s on plain `L` was seen.
-  - [ ] 20.0c *A sample not drawn from `errors.log`* (≥ 10 videos, mixed
+  - [~] 20.0c **not done** — *A sample not drawn from `errors.log`* (≥ 10 videos, mixed
     languages, with and without uploaded subtitles) with the saved scripts.
-  - [ ] 20.0d *Is the timedtext URL printed on a **successful** fetch by the
+  - [x] 20.0d *Is the timedtext URL printed on a **successful** fetch by the
     yt-dlp the app actually resolves?* Verified on 2026.07.04 (yes,
     `[debug] Invoking http downloader on "…timedtext…"`); the app's
     2026.08.19 was only seen printing it on failure. If it does not, 20.5's
     translation log line is dropped and the plan line is kept.
-- [ ] 20.1 Pure functions, test-first: `hasUploadedTrack` (prefix),
+- [x] 20.1 Pure functions, test-first (**plan restricted to base-`en` `L`**; add cases: real `vi`/`de`
+  auto-only tracks → `[L]`, `de` and `de-DE` with an exact/other auto track → `[L]`): `hasUploadedTrack` (prefix),
   `hasASRTrack` (exact), `fetchPlan` (over `captionInfo`; parsing is task 21's
   `parseCaptions`, already tested). The
   `fetchPlan` table includes: cold memo → `[L]`; known, zero tracks → `[L]`;
@@ -151,7 +154,7 @@ Explicitly **not** doing:
   `[L]`; uploaded only under a variant code (the `UF8uR6Z6KLc` shape) → `[L]`;
   `asr` exact `en`, no uploaded → `[L-orig, L]`; `asr` exact `en` **and**
   uploaded → `[L]`; `L` ending in `-orig` → `[L]`.
-- [ ] 20.2 `captionInfo` memo, additive: a per-video memo beside the language memo
+- [x] 20.2 `captionInfo` memo, additive: a per-video memo beside the language memo
   (same cap/clear-when-full shape; the language memo, `lookupSpokenLanguage`
   and `resolveDefaultLanguage([]byte)` keep their signatures, so every
   existing `language_test.go` case passes **without edits**); the default
@@ -162,17 +165,17 @@ Explicitly **not** doing:
   a stub of `lookupSpokenLanguage` alone cannot prove it); (b) on a cold memo
   the funnel makes **zero** lookups; (c) a lookup error is not memoized and
   still yields `en`.
-- [ ] 20.3 `fetchWithPlan(plan, fetch)` replaces `fetchWithOrigRetry` /
+- [x] 20.3 `fetchWithPlan(plan, fetch)` replaces `fetchWithOrigRetry` /
   `origRetryLanguage`. The assertions of the ported `TestFetchWithOrigRetry`
   and `TestOrigRetryLanguage` stay **unedited** (only the call target
   changes), so PR #36's behaviour stays pinned. New cases: orig fails, plain
   succeeds; both fail → the requested language's error; `L-orig` never
   attempted twice.
-- [ ] 20.4 Wired in `fetchSegmentsFromYtDlp`; `fetchTranscript`'s cache key
+- [x] 20.4 Wired in `fetchSegmentsFromYtDlp`; `fetchTranscript`'s cache key
   unchanged. A `fetchTranscript`-level test with an injected fetcher proves a
   success from `L-orig` is cached under `{videoID, L}` (Grade flagged this as
   untested on PR #36).
-- [ ] 20.5 **Observability**, two lines, both format-pinned by unit tests and
+- [x] 20.5 **Observability**, two lines, both format-pinned by unit tests and
   both extending the existing style (`transcript_fetch_orig_retry` is kept):
   - `transcript_fetch_plan <id>: lang=L plan=<a,b> outcome=<attempt that succeeded | failed> duration=…`
     for every fetch whose plan is not just `[L]`;
@@ -183,9 +186,9 @@ Explicitly **not** doing:
     Subject to 20.0d.
   Together they make "how often does orig-first fire" and "how often does plain
   `en` silently succeed on a translation" countable from `errors.log`.
-- [ ] 20.6 Unit tests for 20.1–20.5 (no network; seams stubbed as
+- [x] 20.6 Unit tests for 20.1–20.5 (no network; seams stubbed as
   `withStubbedLookup` does in `language_test.go`).
-- [ ] 20.7 **Live smoke** (CLI built from the branch; record the yt-dlp version
+- [x] 20.7 **Live smoke** (CLI built from the branch; record the yt-dlp version
   actually used; paced ≥ 15 s between videos):
   - one Vietnamese and one German video from task 21's smoke (e.g.
     `r8CppXSqVDU`, `cZSgL76ddDs`), language omitted → transcript in the same
@@ -203,14 +206,14 @@ Explicitly **not** doing:
   `transcriptFetchTimeout` (30 s) — the same 60 s bound the shipped retry has.
   If YouTube stops rejecting plain `en`, the smoke proves less and the unit
   tests are the coverage; say so in the note.
-- [ ] 20.8 Docs: BUG-012 decision/status updated; its option 4 ("decide up
+- [x] 20.8 Docs: BUG-012 decision/status updated; its option 4 ("decide up
   front from `captionTracks`", rejected) marked **superseded**, with the reason
   (the objection "never runs for an explicit `en`" is accepted here: explicit
   callers keep today's path, and the plan uses the track list only when already
   known); a `docs/DECISIONS.md` entry (guarded, peek-only orig-first; `-J`/`tlang`
   and unguarded orig-first rejected, with evidence links); `docs/LEDGER.md` row
   and backlog cross-references; this file.
-- [ ] 20.9 `go build ./... && go vet ./... && go test ./... && gofmt -l internal/ cmd/`
+- [x] 20.9 `go build ./... && go vet ./... && go test ./... && gofmt -l internal/ cmd/`
   clean; Grade run against these items.
 
 ## Test Plan
@@ -313,6 +316,39 @@ their tests are ported, not deleted.
 - Languages other than what 20.0c happens to include (only `en` was swept).
 - A `tlang`-based or `-J`-based decision (rejected above).
 
+## Notes / deviations (implementation, 2026-09-27)
+
+- **Plan restricted to English `L`** (human decision after 20.0b): `fetchPlan` returns `[L]` unless
+  base(`L`) is `en`. Non-English videos keep plain `L` plus the shipped retry.
+- **20.0c not done.** No sample of >= 10 mixed-language videos beyond the 41 already in
+  `docs/evidence/`; informative only, the plan degrades to today's behaviour when its assumption fails.
+- **20.0d verified on both yt-dlp binaries:** a *successful* `-v` fetch prints
+  `[debug] Invoking http downloader on "...timedtext..."` on 2026.07.04 (`dQw4w9WgXcQ`, `vyIgAO8aCbA`)
+  and on 2026.08.19 (`en-orig` on `vyIgAO8aCbA`; that binary is at `%TEMP%\ytpath-bug012\yt-dlp.exe`,
+  the one the app resolved during the smoke). So the `transcript_fetch_translated` line is kept.
+- **Third observation of the silent back-translation:** plain `en` on `vyIgAO8aCbA` with 2026.07.04
+  *succeeded* via `lang=uk&tlang=en` (no error). The smoke run with 2026.08.19 429ed instead and the
+  retry recovered. The real URL is the fixture in `TestTimedtextTranslation`. No live run of *this
+  branch* produced a `transcript_fetch_translated` line (no translated success occurred); that line
+  is covered by unit tests on the real URL shape only.
+- **`transcript_fetch_translated` format:** `lang=<requested> source=<lang param> tlang=<tlang param>`
+  (the draft's `tlang=<src>` was ambiguous). `formatPlanLog` takes the succeeded language instead of an
+  `err` (`outcome=<lang>` or `failed`).
+- **`origRetryLanguage` kept** (with its unedited test) and reused by `fetchWithPlan`; only
+  `fetchWithOrigRetry` is replaced. A `fetchOnce` package variable is the new test seam.
+- **The `transcript_fetch_orig_retry` line** is now logged only for attempts the plan did not include
+  (the rate-limit retry), so a planned `-orig` first attempt is not mislabelled a retry.
+- **20.7 (live smoke, `docs/evidence/bug-012/smoke-task20-results.txt`; the app ran yt-dlp 2026.08.19):**
+  `r8CppXSqVDU` -> vi, `cZSgL76ddDs` -> de, no plan line (restricted); `vyIgAO8aCbA`, `BqRhBq-_kgE` ->
+  `plan=en-orig,en outcome=en-orig` (7.5 s), no `lang=en` failure line; `X0UI0O8YzJM`, `dQw4w9WgXcQ`,
+  `UF8uR6Z6KLc`, `iG9CE55wbtY` -> no plan line, unchanged; explicit `--language en` on `vyIgAO8aCbA`
+  (cold memo) -> today's path: plain `en` 429, `en-orig` retry recovered; `r8CppXSqVDU --language en` ->
+  the BUG-011 message. `get_video_brief` on `dQw4w9WgXcQ` via the MCP binary (stdin held open):
+  "Captions: likely uploaded".
+- **Grade** (`haiku`): 9 PASS, 3 PARTIAL, 2 FAIL on the first pass. FAIL 20.0c: accepted (not done, above).
+  FAIL 20.0d and PARTIAL 20.5/20.7 (`get_video_brief`) were real gaps, closed above with live checks.
+  PARTIAL 20.8: the ledger row and these checkboxes were pending by construction, done here.
+
 ## Review log
 
 - 2026-09-27: drafted by Execute (rev 1).
@@ -336,3 +372,4 @@ their tests are ported, not deleted.
   change to the approach or scope. Not re-Advised (mechanical revision, no new
   judgement call). Human re-approval of rev 3 was requested.
 - 2026-09-27: **Human review: rev 3 approved** ("approve task 20 rev 3"), after PR #39 merged. The approval covers the text as written; 20.0b remains a gate for the non-English part of the plan, and a result that changes the plan goes back to the human.
+- 2026-09-27: **Human decision on 20.0b:** restrict to en - fetchPlan returns [L] unless L base language is en; 20.1 started. (A restriction, not new scope; reversible if a non-English video ever 429s on plain L.)

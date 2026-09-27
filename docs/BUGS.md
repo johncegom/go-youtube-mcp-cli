@@ -969,7 +969,7 @@ Fix now (human decision, 2026-09-20): **message-only fix + BUG-009 amendment**, 
 
 ## BUG-012: Plain `--sub-langs en` 429s on auto-caption videos while the genuine `en-orig` track downloads fine — the BUG-011 fix (resolve the language) cannot help, because the language is already right
 
-- **Status:** open
+- **Status:** shipped retry merged (PR #36); the orig-first follow-up is implemented by task 20 on branch `feat/task-20-guarded-orig-first` (2026-09-27), **not merged yet** — `fixed` once merged
 - **Discovered:** 2026-09-26, user-reported `get_transcript` failure on `vyIgAO8aCbA` (English speech, auto-dubbed into many languages), with the BUG-011 message.
 - **Reachability: yes** — real call path (`get_transcript` with no `language` → `ResolveLanguage` → `"en"` → `fetchSegmentsFromYtDlp`, `internal/core/transcript.go`), reproduced through the real MCP server, and with plain `yt-dlp` and no app code.
 - **Relation to BUG-011:** different mechanism. BUG-011 was a *wrong requested language* on a non-English video, fixed by resolving the language (tasks 18/19). Here the requested language is correct; yt-dlp's own handling of plain `en` selects a throttled request.
@@ -1023,7 +1023,7 @@ Advise (2026-09-26, `docs/eagd-log.md`) evaluated these; recommendation is optio
    Cost: an extra ~6 s yt-dlp call only where the first would fail; one doomed request plus one retry per video per cache lifetime.
 2. **`-orig` first, plain code as fallback.** One call when it works, but changes the working path for every video and regresses videos with uploaded English subs (no `-orig` entry exists for them). Rejected by Advise.
 3. **`--sub-langs "<lang>-orig,<lang>"` in one call.** A single failed subtitle download makes yt-dlp exit non-zero, so the plain code's 429 would still fail the whole run. Rejected.
-4. **Decide up front from `captionTracks`.** Would copy yt-dlp's track-selection logic and never runs for an explicit `en`. Rejected. *Superseded 2026-09-27 by task 20 (draft):* the later evidence showed the two page signals it needs (an uploaded track exists; an `asr` track with the exact code exists) agree with yt-dlp on 17/17, so no yt-dlp logic is copied, and the "never runs for an explicit `en`" objection is accepted — explicit-language callers keep today's path because task 20 uses the track list only when it is already in memory.
+4. **Decide up front from `captionTracks`.** Would copy yt-dlp's track-selection logic and never runs for an explicit `en`. Rejected. *Superseded 2026-09-27 by task 20 (implemented, see DECISION-023):* the later evidence showed the two page signals it needs (an uploaded track exists; an `asr` track with the exact code exists) agree with yt-dlp on 17/17, so no yt-dlp logic is copied, and the "never runs for an explicit `en`" objection is accepted — explicit-language callers keep today's path because task 20 uses the track list only when it is already in memory.
 5. **Message-only:** stop telling the user to change language when the resolved language is already the spoken one. Does not fix the failure; could accompany option 1.
 6. **Do nothing / wait:** if a per-IP throttle explains it, it may clear. Not testable retroactively.
 

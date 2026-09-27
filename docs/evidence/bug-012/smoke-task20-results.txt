@@ -1,0 +1,72 @@
+(first line of the script printed the yt-dlp-2026.07.04 binary version; the app itself ran yt-dlp 2026.08.19 per the errors.log lines below)
+=== r8CppXSqVDU
+exit=0
+--- stderr:
+language: vi (auto-detected spoken language)
+--- stdout head:
+100 tuổi là con số bạn phải đạt được nếu muốn được rút bảo hiểm. Trong khi số người trên 100 tuổi ở Việt Nam thì chỉ
+--- new errors.log lines:
+=== cZSgL76ddDs
+exit=0
+--- stderr:
+language: de (auto-detected spoken language)
+--- stdout head:
+[räuspern] Willkommen und guten Morgen Anna Schneider hier bei uns im Studio. Schönen guten Morgen. Meine Welt, meine Meinung. Hoffnung. Meine Hoffnung liegt 
+--- new errors.log lines:
+=== vyIgAO8aCbA
+exit=0
+--- stderr:
+--- stdout head:
+Well, let me ask a follow-up question on that then. This comes from Jack saying who says what's your mindset when you see so many of these high flyers? Not the 
+--- new errors.log lines:
+[2026-09-26T19:24:26Z] transcript_fetch_plan vyIgAO8aCbA: lang=en plan=en-orig,en outcome=en-orig duration=7.57s
+=== BqRhBq-_kgE
+exit=0
+--- stderr:
+--- stdout head:
+MCP is blowing up right now. Agent's usage of MCP is increasing exponentially and it's not showing any signs of slowing down. But at the same time, many agents 
+--- new errors.log lines:
+[2026-09-26T19:24:50Z] transcript_fetch_plan BqRhBq-_kgE: lang=en plan=en-orig,en outcome=en-orig duration=7.468s
+=== X0UI0O8YzJM
+exit=0
+--- stderr:
+--- stdout head:
+AI is changing software development faster than any technology shift we've seen in decades. 40 years ago, when I was banging out code in the early days of my ca
+--- new errors.log lines:
+=== dQw4w9WgXcQ
+exit=0
+--- stderr:
+--- stdout head:
+[♪♪♪] ♪ We're no strangers to love ♪ ♪ You know the rules and so do I ♪ ♪ A full commitment's what I'm thinking of ♪ ♪ You wouldn't get this
+--- new errors.log lines:
+=== UF8uR6Z6KLc
+exit=0
+--- stderr:
+--- stdout head:
+[Music] this program is brought to you by Stanford University please visit us at stanford.edu thank you I'm uh honored to be with you today for your commencemen
+--- new errors.log lines:
+=== iG9CE55wbtY
+exit=0
+--- stderr:
+--- stdout head:
+Good morning. How are you? (Audience) Good. It's been great, hasn't it? I've been blown away by the whole thing. In fact, I'm leaving. (Laughter) There have bee
+--- new errors.log lines:
+=== vyIgAO8aCbA --language en
+exit=0
+--- stderr:
+--- stdout head:
+Well, let me ask a follow-up question on that then. This comes from Jack saying who says what's your mindset when you see so many of these high flyers? Not the 
+--- new errors.log lines:
+[2026-09-26T19:26:46Z] transcript_fetch vyIgAO8aCbA: lang=en duration=7.725s category=rate_limited err=yt-dlp failed: [debug] Command-line config: ['--no-check-formats', '--ffmpeg-location', 'C:\\Users\\Admin\\AppData\\Local\\go-ytdlp\\ffmpeg.exe', '--output',
+ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[2026-09-26T19:26:51Z] transcript_fetch_orig_retry vyIgAO8aCbA: lang=en retry=en-orig outcome=recovered duration=5.823s
+=== r8CppXSqVDU --language en
+exit=1
+--- stderr:
+error: YouTube rejected the caption download for video r8CppXSqVDU (HTTP 429). If the video isn't spoken in English, retry with the language option set to its spoken language (CLI: --language): the default "en" asks for a machine-translated track, which YouTub
+--- new errors.log lines:
+[2026-09-26T19:27:12Z] transcript_fetch r8CppXSqVDU: lang=en duration=5.622s category=rate_limited err=yt-dlp failed: [debug] Command-line config: ['--no-check-formats', '--ffmpeg-location', 'C:\\Users\\Admin\\AppData\\Local\\go-ytdlp\\ffmpeg.exe', '--output',
+ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests
+[2026-09-26T19:27:16Z] transcript_fetch r8CppXSqVDU: lang=en-orig duration=3.224s category=missing_captions err=no transcript available for video r8CppXSqVDU. The video may not have captions in language "en-orig"
+[2026-09-26T19:27:16Z] transcript_fetch_orig_retry r8CppXSqVDU: lang=en retry=en-orig outcome=failed category=missing_captions duration=3.224s
+ALLDONE
