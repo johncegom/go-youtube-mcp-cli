@@ -3,7 +3,6 @@ package core
 import (
 	"errors"
 	"fmt"
-	"net"
 	"reflect"
 	"testing"
 	"time"
@@ -215,25 +214,24 @@ func TestPickVttFile(t *testing.T) {
 	}
 }
 
-// dialRefused returns a real *net.OpError (satisfying net.Error) by
-// binding a loopback listener, closing it immediately, then dialing the
-// now-closed address — deterministic, offline-safe, and identical on
-// Windows/Linux CI, unlike hand-written OS-specific errno text.
+// fakeNetError satisfies net.Error without touching a real socket.
+// classifyTranscriptError's network branch is a bare errors.As(err,
+// &netErr) — it never inspects the message — so this exercises that branch
+// exactly as well as a real dial, without depending on OS network-stack
+// timing. An earlier version of dialRefused bound a loopback listener,
+// closed it, then dialed the now-closed address to get a genuine
+// *net.OpError; on a loaded CI runner the freed ephemeral port could be
+// reused before the dial, so the dial didn't fail as expected and the case
+// was misclassified (docs/BUGS.md: flaky on ubuntu-latest, 2026-09-27).
+type fakeNetError struct{ msg string }
+
+func (e fakeNetError) Error() string   { return e.msg }
+func (e fakeNetError) Timeout() bool   { return false }
+func (e fakeNetError) Temporary() bool { return false }
+
 func dialRefused(t *testing.T) error {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("dialRefused: listen: %v", err)
-	}
-	addr := l.Addr().String()
-	if err := l.Close(); err != nil {
-		t.Fatalf("dialRefused: close: %v", err)
-	}
-	_, dialErr := net.Dial("tcp", addr)
-	if dialErr == nil {
-		t.Fatal("dialRefused: expected dial to a closed port to fail")
-	}
-	return dialErr
+	return fakeNetError{msg: "dial tcp 127.0.0.1:0: connect: connection refused"}
 }
 
 // The "network error" cases' ground truth comes from three real, distinct
