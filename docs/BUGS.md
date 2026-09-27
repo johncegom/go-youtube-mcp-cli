@@ -969,7 +969,7 @@ Fix now (human decision, 2026-09-20): **message-only fix + BUG-009 amendment**, 
 
 ## BUG-012: Plain `--sub-langs en` 429s on auto-caption videos while the genuine `en-orig` track downloads fine — the BUG-011 fix (resolve the language) cannot help, because the language is already right
 
-- **Status:** shipped retry merged (PR #36); the orig-first follow-up is implemented by task 20 on branch `feat/task-20-guarded-orig-first` (2026-09-27), **not merged yet** — `fixed` once merged
+- **Status:** fixed. Shipped retry merged (PR #36); the orig-first follow-up (task 20, PR #42) merged 2026-09-27.
 - **Discovered:** 2026-09-26, user-reported `get_transcript` failure on `vyIgAO8aCbA` (English speech, auto-dubbed into many languages), with the BUG-011 message.
 - **Reachability: yes** — real call path (`get_transcript` with no `language` → `ResolveLanguage` → `"en"` → `fetchSegmentsFromYtDlp`, `internal/core/transcript.go`), reproduced through the real MCP server, and with plain `yt-dlp` and no app code.
 - **Relation to BUG-011:** different mechanism. BUG-011 was a *wrong requested language* on a non-English video, fixed by resolving the language (tasks 18/19). Here the requested language is correct; yt-dlp's own handling of plain `en` selects a throttled request.
